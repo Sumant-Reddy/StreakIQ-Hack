@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: yami-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: yamiroot
+      MYSQL_DATABASE: yami
+      MYSQL_USER: yami
+      MYSQL_PASSWORD: yami123
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - yami-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: yami-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - yami-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: yami-qdrant
+    restart: unless-stopped
+    ports:
+      - '6333:6333'
+      - '6334:6334'
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - yami-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: yami-backend
+    restart: unless-stopped
+    ports:
+      - '5000:5000'
+    environment:
+      DATABASE_URL: mysql://yami:yami123@mysql:3306/yami
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      - mysql
+      - redis
+      - qdrant
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - yami-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: yami-frontend
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    depends_on:
+      - backend
+    networks:
+      - yami-network
+
+volumes:
+  mysql_data:
+  redis_data:
+  qdrant_data:
+
+networks:
+  yami-network:
+    driver: bridge
