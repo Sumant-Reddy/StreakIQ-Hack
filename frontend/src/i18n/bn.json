@@ -13,7 +13,10 @@
     "overview": "সারসংক্ষেপ",
     "courses": "কোর্সসমূহ",
     "users": "ব্যবহারকারী",
-    "managerView": "ম্যানেজার ভিউ"
+    "managerView": "ম্যানেজার ভিউ",
+    "knowledgeBase": "জ্ঞানভান্ডার",
+    "certifications": "সার্টিফিকেশনসমূহ",
+    "teamReadiness": "টিমের প্রস্তুতি"
   },
   "auth": {
     "signIn": "সাইন ইন করুন",
@@ -246,6 +249,8 @@
     "telugu": "তেলেগু",
     "tamil": "তামিল",
     "kannada": "কন্নড়",
+    "marathi": "মারাঠি",
+    "bengali": "বাংলা",
     "back": "ফিরে যান",
     "viewAll": "সব দেখুন",
     "noData": "কোনো তথ্য উপলব্ধ নেই"

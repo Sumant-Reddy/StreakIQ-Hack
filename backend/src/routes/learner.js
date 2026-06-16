@@ -94,4 +94,134 @@ router.get('/roleplays', authenticate, asyncHandler(async (req, res) => {
   res.json(sessions);
 }));
 
+// Learner: see all active certifications + their personal readiness per cert
+router.get('/certifications', authenticate, asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+
+  const [certs, enrollments, attempts] = await Promise.all([
+    prisma.certification.findMany({
+      where: { isActive: true },
+      include: {
+        courses: { include: { course: { select: { id: true, title: true, department: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.enrollment.findMany({
+      where: { userId },
+      select: { courseId: true, progressPercent: true, completedAt: true },
+    }),
+    prisma.quizAttempt.findMany({
+      where: { userId },
+      include: { quiz: { select: { courseId: true } } },
+    }),
+  ]);
+
+  const enrollMap = Object.fromEntries(enrollments.map(e => [e.courseId, e]));
+
+  // For each quiz, get best score per courseId
+  const bestByCourse = {};
+  for (const a of attempts) {
+    const cid = a.quiz?.courseId;
+    if (!cid) continue;
+    const pct = (a.score / a.totalPoints) * 100;
+    if (!bestByCourse[cid] || pct > bestByCourse[cid]) bestByCourse[cid] = pct;
+  }
+
+  const result = certs.map(cert => {
+    const requiredCourses = cert.courses.map(cc => cc.course);
+    const courseDetails = requiredCourses.map(c => {
+      const enroll = enrollMap[c.id];
+      const quizScore = bestByCourse[c.id] || null;
+      const completion = enroll?.progressPercent || 0;
+      const completionMet = completion >= cert.minCourseCompletion;
+      const quizMet = quizScore !== null && quizScore >= cert.minQuizScore;
+      const enrolled = !!enroll;
+      return { ...c, completion: Math.round(completion), quizScore: quizScore ? Math.round(quizScore) : null, completionMet, quizMet, enrolled };
+    });
+
+    const totalRequired = requiredCourses.length;
+    const completionReady = totalRequired === 0 ? 0 : courseDetails.filter(c => c.completionMet).length / totalRequired;
+    const quizReady = totalRequired === 0 ? 0 : courseDetails.filter(c => c.quizMet).length / totalRequired;
+    const readinessScore = Math.round((completionReady * 50 + quizReady * 50));
+
+    let status = 'NOT_READY';
+    if (readinessScore >= 80) status = 'READY';
+    else if (readinessScore >= 50) status = 'NEARLY_READY';
+
+    return {
+      id: cert.id,
+      name: cert.name,
+      description: cert.description,
+      minQuizScore: cert.minQuizScore,
+      minCourseCompletion: cert.minCourseCompletion,
+      readinessScore,
+      status,
+      courses: courseDetails,
+    };
+  });
+
+  res.json(result);
+}));
+
+// Certificate data for a specific certification
+router.get('/certifications/:certId/certificate', authenticate, asyncHandler(async (req, res) => {
+  const certId = Number(req.params.certId);
+  const userId = req.user.id;
+
+  const [cert, user, enrollments, attempts] = await Promise.all([
+    prisma.certification.findUnique({
+      where: { id: certId },
+      include: { courses: { include: { course: { select: { id: true, title: true } } } } },
+    }),
+    prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true, department: true } }),
+    prisma.enrollment.findMany({
+      where: { userId, courseId: { in: [] } }, // filled below
+      select: { courseId: true, progressPercent: true, completedAt: true },
+    }),
+    prisma.quizAttempt.findMany({
+      where: { userId },
+      include: { quiz: { select: { courseId: true } } },
+    }),
+  ]);
+
+  if (!cert) return res.status(404).json({ error: 'Certification not found' });
+
+  const courseIds = cert.courses.map(cc => cc.courseId);
+  const enrollData = await prisma.enrollment.findMany({
+    where: { userId, courseId: { in: courseIds } },
+    select: { courseId: true, progressPercent: true, completedAt: true },
+  });
+
+  const bestByCourse = {};
+  for (const a of attempts) {
+    const cid = a.quiz?.courseId;
+    if (!cid || !courseIds.includes(cid)) continue;
+    const pct = (a.score / a.totalPoints) * 100;
+    if (!bestByCourse[cid] || pct > bestByCourse[cid]) bestByCourse[cid] = pct;
+  }
+
+  const avgQuizScore = Object.values(bestByCourse).length
+    ? Math.round(Object.values(bestByCourse).reduce((s, v) => s + v, 0) / Object.values(bestByCourse).length)
+    : 0;
+
+  const avgCompletion = courseIds.length
+    ? Math.round(enrollData.reduce((s, e) => s + (e.progressPercent || 0), 0) / courseIds.length)
+    : 0;
+
+  const readinessScore = Math.round(avgCompletion * 0.5 + avgQuizScore * 0.5);
+  const isEligible = readinessScore >= 70 && avgCompletion >= cert.minCourseCompletion && avgQuizScore >= cert.minQuizScore;
+
+  res.json({
+    certification: { id: cert.id, name: cert.name, description: cert.description },
+    learner: { name: user.name, department: user.department },
+    isEligible,
+    readinessScore,
+    avgQuizScore,
+    avgCompletion,
+    completedCourses: enrollData.filter(e => e.completedAt || e.progressPercent >= 100).length,
+    totalCourses: courseIds.length,
+    earnedDate: isEligible ? new Date().toISOString() : null,
+  });
+}));
+
 module.exports = router;

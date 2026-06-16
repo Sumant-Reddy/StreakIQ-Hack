@@ -30,7 +30,12 @@ router.get('/:id', authenticate, asyncHandler(async (req, res) => {
     take: 5,
   });
 
-  res.json({ ...quiz, myAttempts });
+  const bestAttempt = myAttempts.length
+    ? myAttempts.reduce((best, a) => a.score > best.score ? a : best, myAttempts[0])
+    : null;
+  const bestPercentage = bestAttempt ? Math.round((bestAttempt.score / bestAttempt.totalPoints) * 100) : null;
+
+  res.json({ ...quiz, myAttempts, bestAttempt, bestPercentage, attemptCount: myAttempts.length });
 }));
 
 router.post('/:id/attempt', authenticate, asyncHandler(async (req, res) => {
@@ -52,6 +57,17 @@ router.post('/:id/attempt', authenticate, asyncHandler(async (req, res) => {
     answerRecords.push({ questionId: question.id, answer: submitted || '', isCorrect });
   }
 
+  // Retry logic: only award delta points (improvement over previous best)
+  const previousBest = await prisma.quizAttempt.findFirst({
+    where: { userId: req.user.id, quizId: quiz.id },
+    orderBy: { score: 'desc' },
+  });
+  const previousBestScore = previousBest?.score || 0;
+  const previousBestPct = previousBest ? Math.round((previousBest.score / previousBest.totalPoints) * 100) : null;
+  const deltaScore = Math.max(0, score - previousBestScore);
+  const isFirstAttempt = !previousBest;
+  const isImprovement = deltaScore > 0;
+
   const attempt = await prisma.quizAttempt.create({
     data: {
       userId: req.user.id,
@@ -64,7 +80,10 @@ router.post('/:id/attempt', authenticate, asyncHandler(async (req, res) => {
     include: { answers: true },
   });
 
-  await enqueueEvent('QUIZ_COMPLETED', req.user.id, { score, totalPoints });
+  // Only enqueue points if first attempt or genuine improvement
+  if (isFirstAttempt || isImprovement) {
+    await enqueueEvent('QUIZ_COMPLETED', req.user.id, { score: deltaScore || score, totalPoints });
+  }
 
   const percentage = Math.round((score / totalPoints) * 100);
   res.json({
@@ -73,6 +92,11 @@ router.post('/:id/attempt', authenticate, asyncHandler(async (req, res) => {
     totalPoints,
     percentage,
     passed: percentage >= quiz.passingScore,
+    isFirstAttempt,
+    isImprovement,
+    deltaScore,
+    previousBestPct,
+    pointsEarned: (isFirstAttempt || isImprovement) ? Math.round(((deltaScore || score) / totalPoints) * 20) : 0,
     breakdown: quiz.questions.map(q => ({
       question: q.text,
       correct: answerRecords.find(a => a.questionId === q.id)?.isCorrect,

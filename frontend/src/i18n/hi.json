@@ -13,7 +13,10 @@
     "overview": "अवलोकन",
     "courses": "पाठ्यक्रम",
     "users": "उपयोगकर्ता",
-    "managerView": "प्रबंधक दृश्य"
+    "managerView": "प्रबंधक दृश्य",
+    "knowledgeBase": "ज्ञान आधार",
+    "certifications": "प्रमाणन",
+    "teamReadiness": "टीम की तैयारी"
   },
   "auth": {
     "signIn": "साइन इन करें",
@@ -246,6 +249,8 @@
     "telugu": "तेलुगु",
     "tamil": "तमिल",
     "kannada": "कन्नड़",
+    "marathi": "मराठी",
+    "bengali": "बंगाली",
     "back": "वापस",
     "viewAll": "सभी देखें",
     "noData": "कोई डेटा उपलब्ध नहीं है"

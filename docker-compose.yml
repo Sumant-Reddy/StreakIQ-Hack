@@ -1,22 +1,6 @@
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: yami-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: yamiroot
-      MYSQL_DATABASE: yami
-      MYSQL_USER: yami
-      MYSQL_PASSWORD: yami123
-    ports:
-      - '3306:3306'
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - yami-network
-
   redis:
     image: redis:7-alpine
     container_name: yami-redis
@@ -58,11 +42,11 @@ services:
     container_name: yami-docmost
     restart: unless-stopped
     ports:
-      - '3001:3000'
+      - '3002:3000' 
     environment:
-      APP_URL: http://localhost:3001
-      DATABASE_URL: postgresql://docmost:docmost123@docmost-db:5432/docmost
-      REDIS_URL: redis://redis:6379
+      APP_URL: http://localhost:3002 
+      DATABASE_URL: postgresql://docmost:docmost123@yami-docmost-db:5432/docmost
+      REDIS_URL: redis://yami-redis:6379
       APP_SECRET: changeme-docmost-secret-32chars-min
     depends_on:
       - docmost-db
@@ -80,18 +64,26 @@ services:
     restart: unless-stopped
     ports:
       - '5000:5000'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ./backend/.env
     environment:
-      DATABASE_URL: mysql://yami:yami123@mysql:3306/yami
-      REDIS_URL: redis://redis:6379
-      QDRANT_URL: http://qdrant:6333
-      DOCMOST_URL: http://docmost:3000
-      DOCMOST_API_KEY: ${DOCMOST_API_KEY:-}
-      FRONTEND_URL: http://localhost:3000
+      # 💡 LOCAL TRANSACTION LOGGING: Prisma targets your Mac's host MySQL instance
+      DATABASE_URL: mysql://yami:yami123@host.docker.internal:3306/yami
+      
+      # 💡 DIRECT INJECTION BRIDGE: Expose Docmost's Postgres network path directly to Node
+      DOCMOST_DB_URL: postgresql://docmost:docmost123@yami-docmost-db:5432/docmost
+      DOCMOST_DEFAULT_SPACE_ID: 019ed1aa-e259-7a4e-a982-c792fc7d57e4
+      REDIS_URL: redis://yami-redis:6379
+      QDRANT_URL: http://yami-qdrant:6333       
+      DOCMOST_URL: http://yami-docmost:3000     
+      FRONTEND_URL: http://localhost:3000     
     depends_on:
-      - mysql
       - redis
       - qdrant
       - docmost
+      - docmost-db
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -105,14 +97,13 @@ services:
     container_name: yami-frontend
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '3000:3000' 
     depends_on:
       - backend
     networks:
       - yami-network
 
 volumes:
-  mysql_data:
   redis_data:
   qdrant_data:
   docmost_db_data:

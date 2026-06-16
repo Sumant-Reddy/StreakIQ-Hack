@@ -75,22 +75,38 @@ router.post('/copilot/query', authenticate, requireManager, asyncHandler(async (
     },
   });
 
-  const teamData = team.map(u => ({
-    name: u.name,
-    department: u.department,
-    designation: u.designation,
-    retentionScore: u.retentionScore?.score || 0,
-    riskLevel: u.riskProfile?.riskLevel || 'UNKNOWN',
-    streak: u.streak?.currentStreak || 0,
-    points: u.points?.totalPoints || 0,
-    coursesCompleted: u.enrollments.filter(e => e.completedAt).length,
-    avgQuizScore: u.quizAttempts.length
-      ? u.quizAttempts.reduce((s, a) => s + (a.score / a.totalPoints) * 100, 0) / u.quizAttempts.length
-      : 0,
-  }));
+  const teamData = {
+    total: team.length,
+    members: team.map(u => ({
+      name: u.name,
+      department: u.department,
+      designation: u.designation,
+      retentionScore: Math.round(u.retentionScore?.score || 0),
+      riskLevel: u.riskProfile?.riskLevel || 'LOW',
+      streak: u.streak?.currentStreak || 0,
+      points: u.points?.totalPoints || 0,
+      weeklyPoints: u.points?.weeklyPoints || 0,
+      coursesEnrolled: u.enrollments.length,
+      coursesCompleted: u.enrollments.filter(e => e.completedAt).length,
+      recentCourses: u.enrollments.slice(0, 3).map(e => ({
+        title: e.course?.title,
+        progress: Math.round(e.progressPercent || 0),
+        completed: !!e.completedAt,
+      })),
+      recentQuizScores: u.quizAttempts.map(a => Math.round((a.score / a.totalPoints) * 100)),
+      avgQuizScore: u.quizAttempts.length
+        ? Math.round(u.quizAttempts.reduce((s, a) => s + (a.score / a.totalPoints) * 100, 0) / u.quizAttempts.length)
+        : null,
+    })),
+    summary: {
+      highRisk: team.filter(u => ['HIGH', 'CRITICAL'].includes(u.riskProfile?.riskLevel)).length,
+      avgRetention: team.length ? Math.round(team.reduce((s, u) => s + (u.retentionScore?.score || 0), 0) / team.length) : 0,
+      totalPointsThisWeek: team.reduce((s, u) => s + (u.points?.weeklyPoints || 0), 0),
+    },
+  };
 
   const insight = await generateManagerInsight({ query, teamData });
-  res.json({ insight, teamSummary: { total: team.length, data: teamData } });
+  res.json({ insight, teamSummary: { total: teamData.total, ...teamData.summary, data: teamData.members } });
 }));
 
 // Risk analysis for a user
@@ -133,6 +149,121 @@ router.get('/flashcards/:moduleId', authenticate, asyncHandler(async (req, res) 
     orderBy: { order: 'asc' },
   });
   res.json(flashcards);
+}));
+
+// RAG Q&A endpoint for JC learners
+router.post('/ask', authenticate, asyncHandler(async (req, res) => {
+  const { question, courseId } = req.body;
+  if (!question?.trim()) return res.status(400).json({ error: 'Question is required' });
+
+  const { searchSimilar } = require('../services/embeddingService');
+  const { ragAnswer } = require('../services/aiService');
+
+  const { context, sources, chunks } = await searchSimilar(question, {
+    courseId: courseId ? Number(courseId) : undefined,
+    includeDocmost: true,
+    limit: 6,
+  });
+
+  const result = await ragAnswer({
+    question,
+    context,
+    sources,
+    userId: req.user.id,
+  });
+
+  // Log interaction
+  await prisma.aIInteraction.create({
+    data: {
+      userId: req.user.id,
+      sessionId: `http_${req.user.id}_${Date.now()}`,
+      role: 'user',
+      content: question,
+    },
+  }).catch(() => {});
+
+  res.json({
+    answer: result.answer,
+    sources: result.sources,
+    chunks: chunks.slice(0, 3).map(c => ({ source: c.source, excerpt: c.text.substring(0, 200) })),
+  });
+}));
+
+// AI-powered course recommendations
+router.get('/ai-recommendations/:userId', authenticate, asyncHandler(async (req, res) => {
+  const userId = Number(req.params.userId);
+  // Users can only view their own recommendations unless admin/manager
+  if (req.user.id !== userId && !['ADMIN', 'MANAGER'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const { generateAIRecommendations, generateRecommendations } = require('../services/recommendationService');
+
+  // Run both in parallel: AI analysis + standard rules-based
+  const [aiRecs, standardRecs] = await Promise.all([
+    generateAIRecommendations(userId),
+    generateRecommendations(userId),
+  ]);
+
+  // Merge: AI recommendations come first, then standard ones not already in AI list
+  const aiCourseIds = new Set(aiRecs.map(r => r.courseId));
+  const merged = [
+    ...aiRecs.map(r => ({ ...r, source: 'ai', course: standardRecs.find(s => s.courseId === r.courseId)?.course })),
+    ...standardRecs.filter(r => !aiCourseIds.has(r.courseId)).slice(0, 5).map(r => ({ ...r, source: 'rules' })),
+  ];
+
+  // Enrich with course data for any AI recs missing course info
+  const missingCourseIds = merged.filter(r => !r.course).map(r => r.courseId);
+  if (missingCourseIds.length) {
+    const courses = await prisma.course.findMany({
+      where: { id: { in: missingCourseIds } },
+      include: { modules: { select: { contentType: true }, take: 5 } },
+    });
+    for (const rec of merged) {
+      if (!rec.course) {
+        const c = courses.find(c => c.id === rec.courseId);
+        if (c) {
+          rec.course = c;
+          rec.contentTypes = [...new Set(c.modules.map(m => m.contentType))];
+        }
+      }
+    }
+  }
+
+  res.json(merged.filter(r => r.course).slice(0, 8));
+}));
+
+// AI/Embedding health check
+router.get('/health', authenticate, asyncHandler(async (req, res) => {
+  const { testEmbedding } = require('../services/embeddingService');
+  const { getRedis } = require('../services/redisService');
+
+  const [embeddingTest, redisStatus, geminiKeyPresent] = await Promise.all([
+    testEmbedding().catch(err => ({ error: err.message })),
+    (async () => {
+      try {
+        const r = getRedis();
+        await r.ping();
+        return 'connected';
+      } catch { return 'disconnected'; }
+    })(),
+    Promise.resolve(!!process.env.GEMINI_API_KEY),
+  ]);
+
+  const qdrantStatus = await (async () => {
+    try {
+      const { ensureCollection } = require('../services/embeddingService');
+      await ensureCollection();
+      return 'connected';
+    } catch { return 'disconnected'; }
+  })();
+
+  res.json({
+    gemini: { keyPresent: geminiKeyPresent, embedding: embeddingTest },
+    redis: redisStatus,
+    qdrant: qdrantStatus,
+    timestamp: new Date(),
+  });
 }));
 
 module.exports = router;

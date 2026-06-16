@@ -1,17 +1,30 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   LayoutDashboard, BookOpen, Brain, Trophy, Users, BarChart3,
   Settings, LogOut, Menu, X, Flame, Star, TrendingUp, Shield,
-  ChevronRight, Zap, MessageSquare, UserCheck, Award, Target, Globe,
+  ChevronRight, Zap, MessageSquare, UserCheck, Award, Target, Globe, FileText, Medal,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { i18nApi } from '../services/api';
+
+const LANG_LABELS = {
+  en: 'English',
+  hi: 'हिंदी',
+  ta: 'தமிழ்',
+  kn: 'ಕನ್ನಡ',
+  te: 'తెలుగు',
+  mr: 'मराठी',
+  bn: 'বাংলা',
+};
 
 const NAV_LEARNER = (t) => [
   { label: t('nav.dashboard'), icon: LayoutDashboard, path: '/learn' },
   { label: t('nav.myCourses'), icon: BookOpen, path: '/learn/courses' },
   { label: t('nav.learningPath'), icon: Target, path: '/learn/path' },
+  { label: t('nav.certifications', 'Certifications'), icon: Award, path: '/learn/certifications' },
+  { label: t('nav.badges', 'My Badges'), icon: Medal, path: '/learn/badges' },
   { label: t('nav.aiCompanion'), icon: Brain, path: '/learn/ai-companion' },
   { label: t('nav.mockRoleplay'), icon: MessageSquare, path: '/learn/roleplay' },
   { label: t('nav.leaderboard'), icon: Trophy, path: '/learn/leaderboard' },
@@ -20,12 +33,16 @@ const NAV_LEARNER = (t) => [
 const NAV_MANAGER = (t) => [
   { label: t('nav.dashboard'), icon: LayoutDashboard, path: '/manager' },
   { label: t('nav.copilot'), icon: Brain, path: '/manager/copilot' },
-  { label: t('nav.certification'), icon: Award, path: '/manager/certification' },
+  { label: t('nav.knowledgeBase'), icon: FileText, path: '/manage/docs' },
+  { label: t('nav.certifications', 'Certifications'), icon: Award, path: '/admin/certifications' },
+  { label: t('nav.teamReadiness', 'Team Readiness'), icon: TrendingUp, path: '/manager/certification' },
 ];
 
 const NAV_ADMIN = (t) => [
   { label: t('nav.overview'), icon: LayoutDashboard, path: '/admin' },
   { label: t('nav.courses'), icon: BookOpen, path: '/admin/courses' },
+  { label: t('nav.certifications', 'Certifications'), icon: Award, path: '/admin/certifications' },
+  { label: t('nav.knowledgeBase'), icon: FileText, path: '/admin/docs' },
   { label: t('nav.users'), icon: Users, path: '/admin/users' },
   { label: t('nav.managerView'), icon: UserCheck, path: '/manager' },
 ];
@@ -35,21 +52,27 @@ export default function Layout({ children, title }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const { t, i18n } = useTranslation();
+  const langDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(event.target)) {
+        setLangDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const changeLanguage = async (lang) => {
     i18n.changeLanguage(lang);
     localStorage.setItem('yami_lang', lang);
+    setLangDropdownOpen(false);
     // persist to backend if user is logged in
     try {
-      await fetch('/api/auth/me/language', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('yami_token')}`,
-        },
-        body: JSON.stringify({ language: lang.toUpperCase() }),
-      });
+      await i18nApi.setLanguage(lang.toUpperCase());
     } catch (_) {}
   };
 
@@ -136,12 +159,15 @@ export default function Layout({ children, title }) {
               <Flame className="w-3.5 h-3.5" />
               <span>YAMI</span>
             </div>
-            <div className="relative group">
-              <button className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg text-xs transition-all">
+            <div className="relative" ref={langDropdownRef}>
+              <button
+                onClick={() => setLangDropdownOpen((open) => !open)}
+                className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg text-xs transition-all"
+              >
                 <Globe className="w-3.5 h-3.5" />
-                <span>{i18n.language === 'hi' ? 'हिंदी' : i18n.language === 'te' ? 'తెలుగు' : i18n.language === 'ta' ? 'தமிழ்' : i18n.language === 'kn' ? 'ಕನ್ನಡ' : 'English'}</span>
+                <span>{LANG_LABELS[i18n.language] || 'English'}</span>
               </button>
-              <div className="absolute right-0 top-full mt-1 w-36 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all">
+              <div className={`absolute right-0 top-full mt-1 w-36 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 transition-all ${langDropdownOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 {[
                   { code: 'en', label: 'English' },
                   { code: 'hi', label: 'हिंदी' },

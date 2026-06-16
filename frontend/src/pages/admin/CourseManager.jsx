@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { courseApi, aiApi, adminApi } from '../../services/api';
-import { Plus, BookOpen, Edit, Eye, Brain, FileText, X, CheckCircle, Loader, RefreshCw } from 'lucide-react';
+import { Plus, BookOpen, Edit, Eye, Brain, FileText, X, CheckCircle, Loader, RefreshCw, Upload, ImagePlus } from 'lucide-react';
 
 export default function CourseManager() {
   const { t } = useTranslation();
@@ -21,6 +21,23 @@ export default function CourseManager() {
   });
   const [moduleForm, setModuleForm] = useState({ contentType: 'VIDEO', contentUrl: '' });
   const [quizForm, setQuizForm] = useState({ content: '', contentType: 'PDF', difficulty: 'MEDIUM', count: 5 });
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadingThumb, setUploadingThumb] = useState(false);
+
+  const uploadFile = async (file, type = 'file') => {
+    const formData = new FormData();
+    if (type === 'thumbnail') {
+      formData.append('thumbnail', file);
+    } else {
+      formData.append('file', file);
+    }
+    const endpoint = type === 'thumbnail' ? '/api/upload/thumbnail' : '/api/upload';
+    const token = localStorage.getItem('yami_token');
+    const res = await fetch(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData });
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    return data.url;
+  };
 
   const syncDocmost = async () => {
     setSyncing(true);
@@ -146,6 +163,30 @@ export default function CourseManager() {
                 <label className="text-xs text-gray-400 block mb-1">Estimated Hours</label>
                 <input className="input w-full" type="number" min="0.5" step="0.5" value={form.estimatedHours} onChange={e => setForm(f => ({ ...f, estimatedHours: parseFloat(e.target.value) }))} />
               </div>
+              <div className="lg:col-span-2">
+                <label className="text-xs text-gray-400 block mb-1">Thumbnail</label>
+                <div className="flex gap-2">
+                  <input className="input flex-1" value={form.thumbnail || ''} onChange={e => setForm(f => ({ ...f, thumbnail: e.target.value }))} placeholder="Paste image URL or upload below" />
+                  <label className={`btn-secondary text-xs flex items-center gap-1.5 cursor-pointer ${uploadingThumb ? 'opacity-50' : ''}`}>
+                    <ImagePlus className="w-4 h-4" />
+                    {uploadingThumb ? 'Uploading...' : 'Upload'}
+                    <input type="file" accept="image/*" className="hidden" disabled={uploadingThumb}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploadingThumb(true);
+                        try {
+                          const url = await uploadFile(file, 'thumbnail');
+                          setForm(f => ({ ...f, thumbnail: url }));
+                        } catch { alert('Thumbnail upload failed'); }
+                        finally { setUploadingThumb(false); }
+                      }} />
+                  </label>
+                </div>
+                {form.thumbnail && (
+                  <img src={form.thumbnail} alt="Thumbnail preview" className="mt-2 h-20 rounded-lg object-cover border border-gray-700" />
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -179,30 +220,47 @@ export default function CourseManager() {
                 {['VIDEO', 'PDF', 'SOP', 'PPT', 'ARTICLE'].map(ct => <option key={ct} value={ct}>{ct}</option>)}
               </select>
             </div>
-            {moduleForm.contentType === 'VIDEO' && (
+            {['VIDEO', 'PDF', 'PPT', 'SOP'].includes(moduleForm.contentType) && (
               <div>
-                <label className="text-xs text-gray-400 mb-1 block">{t('course.videoUrl')}</label>
-                <input value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
-                  placeholder="https://..."
-                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
-              </div>
-            )}
-            {(moduleForm.contentType === 'PDF' || moduleForm.contentType === 'SOP') && (
-              <div>
-                <label className="text-xs text-gray-400 mb-1 block">{t('course.documentUrl')}</label>
-                <input value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
-                  placeholder="S3 URL or direct link to PDF/Doc"
-                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
-                <p className="text-xs text-gray-500 mt-1">Supports PDF, Word docs, and SOP documents</p>
-              </div>
-            )}
-            {moduleForm.contentType === 'PPT' && (
-              <div>
-                <label className="text-xs text-gray-400 mb-1 block">{t('course.pptUrl')}</label>
-                <input value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
-                  placeholder="Google Slides share URL or PowerPoint S3 URL"
-                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
-                <p className="text-xs text-gray-500 mt-1">Use Google Slides: File → Share → Publish to web → Embed URL</p>
+                <label className="text-xs text-gray-400 mb-1 block">
+                  {moduleForm.contentType === 'VIDEO' ? t('course.videoUrl') : moduleForm.contentType === 'PPT' ? t('course.pptUrl') : t('course.documentUrl')}
+                </label>
+                <div className="flex gap-2">
+                  <input className="input flex-1" value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
+                    placeholder={
+                      moduleForm.contentType === 'VIDEO' ? 'YouTube URL, video file URL, or upload (.mp4, .mp3, .wav) →'
+                      : moduleForm.contentType === 'PDF' || moduleForm.contentType === 'SOP' ? 'File URL or upload (.pdf, .doc, .jpg, .png) →'
+                      : moduleForm.contentType === 'ARTICLE' ? 'Article text, image URL, or upload →'
+                      : 'Google Slides URL or upload (.ppt, .pptx) →'
+                    } />
+                  <label className={`btn-secondary text-xs flex items-center gap-1.5 cursor-pointer ${uploadingFile ? 'opacity-50' : ''}`}>
+                    <Upload className="w-4 h-4" />
+                    {uploadingFile ? '...' : 'Upload'}
+                    <input type="file"
+                      accept={
+                        moduleForm.contentType === 'VIDEO'
+                          ? 'video/*,audio/*,.mp3,.wav,.ogg,.aac,.m4a'
+                          : moduleForm.contentType === 'PDF' || moduleForm.contentType === 'SOP'
+                          ? '.pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.svg'
+                          : moduleForm.contentType === 'ARTICLE'
+                          ? '.jpg,.jpeg,.png,.gif,.webp,.svg,.pdf,.doc,.docx'
+                          : '.ppt,.pptx'
+                      }
+                      className="hidden" disabled={uploadingFile}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploadingFile(true);
+                        try {
+                          const url = await uploadFile(file, 'file');
+                          setModuleForm(f => ({ ...f, contentUrl: url }));
+                        } catch { alert('Upload failed'); }
+                        finally { setUploadingFile(false); }
+                      }} />
+                  </label>
+                </div>
+                {moduleForm.contentType === 'PPT' && <p className="text-xs text-gray-500 mt-1">Use Google Slides: File → Share → Publish to web → Embed URL</p>}
+                {(moduleForm.contentType === 'PDF' || moduleForm.contentType === 'SOP') && <p className="text-xs text-gray-500 mt-1">Supports PDF, Word docs, and SOP documents</p>}
               </div>
             )}
             {moduleForm.contentType === 'ARTICLE' && (
@@ -287,6 +345,7 @@ export default function CourseManager() {
             {courses.map(c => (
               <div key={c.id} className="card space-y-3 hover:border-gray-600 transition-colors">
                 <div className="flex items-start justify-between gap-3">
+                  {c.thumbnail && <img src={c.thumbnail} alt={c.title} className="w-12 h-12 rounded-lg object-cover border border-gray-700 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-semibold text-white">{c.title}</h4>

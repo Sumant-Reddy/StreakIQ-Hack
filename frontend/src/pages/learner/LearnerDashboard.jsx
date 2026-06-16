@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next'; // Added missing import
 import Layout from '../../components/Layout';
 import StatCard from '../../components/StatCard';
 import RetentionGauge from '../../components/RetentionGauge';
@@ -8,27 +8,45 @@ import RiskBadge from '../../components/RiskBadge';
 import { learnerApi, aiApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  BookOpen, Flame, Trophy, Brain, Target, Clock, Star,
+  BookOpen, Flame, Trophy, Brain, Target,
   ChevronRight, TrendingUp, MessageSquare, Zap, AlertTriangle,
 } from 'lucide-react';
 
 export default function LearnerDashboard() {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t } = useTranslation(); // Added missing translation variable function hook
   const [data, setData] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([learnerApi.dashboard(), aiApi.recommendations(user.id)])
-      .then(([dash, recs]) => { setData(dash); setRecommendations(recs); })
+    if (!user?.id) return;
+    
+    Promise.all([
+      learnerApi.dashboard().catch(err => { console.error(err); return null; }),
+      aiApi.recommendations(user.id).catch(err => { console.error(err); return []; })
+    ])
+      .then(([dash, recs]) => { 
+        setData(dash); 
+        
+        // Defensively sanitize the fallback layout schema coming from mock backend objects
+        if (Array.isArray(recs)) {
+          setRecommendations(recs);
+        } else if (recs?.recommendations && Array.isArray(recs.recommendations)) {
+          setRecommendations(recs.recommendations);
+        } else {
+          setRecommendations([]);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user.id]);
+  }, [user?.id]);
 
   if (loading) return (
-    <Layout title={t('dashboard.myLearningDashboard')}>
-      <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full" /></div>
+    <Layout title="My Dashboard">
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full" />
+      </div>
     </Layout>
   );
 
@@ -38,7 +56,7 @@ export default function LearnerDashboard() {
   const risk = data?.risk?.riskLevel || 'LOW';
 
   return (
-    <Layout title={t('dashboard.myLearningDashboard')}>
+    <Layout title={t('nav.dashboard') || "My Dashboard"}>
       <div className="space-y-6 max-w-6xl">
         {/* Welcome + Risk alert */}
         {(risk === 'HIGH' || risk === 'CRITICAL') && (
@@ -93,7 +111,7 @@ export default function LearnerDashboard() {
           <div className="card space-y-4 lg:col-span-2">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-white">{t('dashboard.continueLearning')}</h3>
-              <Link to="/learn/courses" className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
+              <Link to="/learn/course" className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
                 {t('dashboard.allCourses')} <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -105,7 +123,7 @@ export default function LearnerDashboard() {
                     <BookOpen className="w-5 h-5 text-brand-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white truncate">{e.course?.title}</div>
+                    <div className="text-sm font-medium text-white truncate">{e.course?.title || e.Course?.title}</div>
                     <div className="mt-1.5 h-1.5 bg-gray-700 rounded-full overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-brand-500 to-pink-500 rounded-full" style={{ width: `${e.progressPercent || 0}%` }} />
                     </div>
@@ -116,7 +134,7 @@ export default function LearnerDashboard() {
               ))}
               {(!data?.enrollments || data.enrollments.length === 0) && (
                 <div className="text-center py-6 text-gray-500 text-sm">
-                  {t('dashboard.noActiveCourses')}. <Link to="/learn/courses" className="text-brand-400">{t('dashboard.browseCourses')}</Link>
+                  {t('dashboard.noActiveCourses')}. <Link to="/learn/course" className="text-brand-400">{t('dashboard.browseCourses')}</Link>
                 </div>
               )}
             </div>
@@ -128,10 +146,10 @@ export default function LearnerDashboard() {
           <h3 className="font-semibold text-white mb-4">{t('dashboard.quickActions')}</h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: t('nav.aiCompanion'), desc: t('dashboard.askQuestions'), icon: Brain, path: '/learn/ai-companion', color: 'from-brand-500/20 to-brand-600/10 border-brand-500/30' },
-              { label: t('nav.mockRoleplay'), desc: t('dashboard.practiceWithAI'), icon: MessageSquare, path: '/learn/roleplay', color: 'from-pink-500/20 to-pink-600/10 border-pink-500/30' },
-              { label: t('nav.learningPath'), desc: t('dashboard.personalizedCurriculum'), icon: Target, path: '/learn/path', color: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30' },
-              { label: t('nav.leaderboard'), desc: t('dashboard.checkYourRanking'), icon: Trophy, path: '/learn/leaderboard', color: 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/30' },
+              { label: t('nav.aiCompanion') || 'AI Companion', desc: t('dashboard.askQuestions'), icon: Brain, path: '/learn/ai-companion', color: 'from-brand-500/20 to-brand-600/10 border-brand-500/30' },
+              { label: t('nav.mockRoleplay') || 'Customer Roleplay', desc: t('dashboard.practiceWithAI'), icon: MessageSquare, path: '/learn/roleplay', color: 'from-pink-500/20 to-pink-600/10 border-pink-500/30' },
+              { label: t('nav.learningPath') || 'Learning Path', desc: t('dashboard.personalizedCurriculum'), icon: Target, path: '/learn/path', color: 'from-emerald-500/20 to-emerald-600/10 border-emerald-500/30' },
+              { label: t('nav.leaderboard') || 'Leaderboard', desc: t('dashboard.checkYourRanking'), icon: Trophy, path: '/learn/leaderboard', color: 'from-yellow-500/20 to-yellow-600/10 border-yellow-500/30' },
             ].map(action => (
               <Link key={action.label} to={action.path}
                 className={`bg-gradient-to-br ${action.color} border rounded-xl p-4 hover:scale-[1.02] transition-all group`}>
@@ -144,28 +162,31 @@ export default function LearnerDashboard() {
         </div>
 
         {/* AI Recommendations */}
-        {recommendations.length > 0 && (
+        {recommendations && recommendations.length > 0 && (
           <div>
-            <h3 className="font-semibold text-white mb-4">{t('dashboard.aiRecommendations')}</h3>
+            <h3 className="font-semibold text-white mb-4">AI Recommendations</h3>
             <div className="grid lg:grid-cols-3 gap-3">
-              {recommendations.slice(0, 3).map((rec, i) => (
-                <div key={i} className="card border-brand-500/20 bg-brand-500/5">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
-                      <Zap className="w-4 h-4 text-brand-400" />
+              {recommendations.slice(0, 3).map((rec, i) => {
+                const title = rec?.course?.title || rec?.Course?.title || "Recommended Lesson";
+                return (
+                  <div key={i} className="card border-brand-500/20 bg-brand-500/5 flex flex-col justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
+                        <Zap className="w-4 h-4 text-brand-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-white">{title}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{rec?.reason || "Suggested based on your metrics"}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm font-medium text-white">{rec.course?.title}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{rec.reason}</div>
-                    </div>
-                  </div>
-                  {rec.courseId && (
-                    <Link to={`/learn/course/${rec.courseId}`} className="btn-primary text-xs py-1.5 mt-3 w-full text-center block">
-                      Start Now
+                    {rec?.courseId && (
+                      <Link to={`/learn/course/${rec.courseId}`} className="btn-primary text-xs py-1.5 mt-3 w-full text-center block">
+                        Start Now
                     </Link>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

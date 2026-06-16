@@ -8,18 +8,18 @@ export default function AICopilot() {
   const { t } = useTranslation();
 
   const QUICK_QUERIES = [
-    t('manager.quickQuery1'),
-    t('manager.quickQuery2'),
-    t('manager.quickQuery3'),
-    t('manager.quickQuery4'),
-    t('manager.quickQuery5'),
-    t('manager.quickQuery6'),
+    'Who are my top 3 performers this week by points?',
+    'Which team members are at high or critical knowledge risk?',
+    'Show me quiz performance trends across the team',
+    'Who has not completed any courses in the last 7 days?',
+    'What is the average retention score and who is below 60%?',
+    'Which team members need immediate coaching intervention?',
   ];
 
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: t('manager.greeting'),
+      content: "Hello! I'm your AI Manager Copilot. I have access to your team's learning data — quiz scores, retention, course progress, and knowledge risk levels. Ask me anything about your team's performance.",
     },
   ]);
   const [input, setInput] = useState('');

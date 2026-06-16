@@ -15,14 +15,20 @@ export default defineConfig({
     allowedHosts: [
       'carat-dreadlock-vitally.ngrok-free.dev',
     ],
+    // 👇 Fixes Vite HMR breaking over ngrok tunnels
+    hmr: {
+      clientPort: 443,
+    },
     proxy: {
+      // Standard REST API Proxy routing
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://localhost:5000', // 👈 Change localhost to yami-backend
         changeOrigin: true,
       },
+      // Real-time Learner Socket.io Routing
       '/socket.io': {
-        target: 'http://localhost:5000',
-        ws: true,
+        target: 'http://localhost:5000', // 👈 Change localhost to yami-backend
+        ws: true, // Keep this active
         changeOrigin: true,
       },
     },

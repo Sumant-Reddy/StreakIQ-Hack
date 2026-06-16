@@ -13,7 +13,10 @@
     "overview": "ಅವಲೋಕನ",
     "courses": "ಕೋರ್ಸ್‌ಗಳು",
     "users": "ಬಳಕೆದಾರರು",
-    "managerView": "ವ್ಯವಸ್ಥಾಪಕರ ವೀಕ್ಷಣೆ"
+    "managerView": "ವ್ಯವಸ್ಥಾಪಕರ ವೀಕ್ಷಣೆ",
+    "knowledgeBase": "ಜ್ಞಾನ ಭಂಡಾರ",
+    "certifications": "ಪ್ರಮಾಣೀಕರಣಗಳು",
+    "teamReadiness": "ತಂಡದ ಸನ್ನದ್ಧತೆ"
   },
   "auth": {
     "signIn": "ಸೈನ್ ಇನ್ ಮಾಡಿ",
@@ -246,6 +249,8 @@
     "telugu": "ತೆಲುಗು",
     "tamil": "ತಮಿಳು",
     "kannada": "ಕನ್ನಡ",
+    "marathi": "ಮರಾಠಿ",
+    "bengali": "ಬೆಂಗಾಲಿ",
     "back": "ಹಿಂದಕ್ಕೆ",
     "viewAll": "ಎಲ್ಲವನ್ನೂ ವೀಕ್ಷಿಸಿ",
     "noData": "ಯಾವುದೇ ಡೇಟಾ ಲಭ್ಯವಿಲ್ಲ"

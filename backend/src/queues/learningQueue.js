@@ -9,48 +9,42 @@ const logger = require('../utils/logger');
 let queues = {};
 let workers = {};
 
-// function initQueues() {
-//   try {
-//     const connection = getRedis();
-
-//     queues.learning = new Queue('learning-events', { connection });
-//     queues.retention = new Queue('retention-calc', { connection });
-
-//     workers.learning = new Worker('learning-events', processLearningEvent, { connection, concurrency: 5 });
-//     workers.retention = new Worker('retention-calc', processRetentionCalc, { connection, concurrency: 3 });
-
-//     workers.learning.on('completed', job => logger.info(`Job ${job.id} completed`));
-//     workers.learning.on('failed', (job, err) => logger.error(`Job ${job?.id} failed:`, err.message));
-
-//     logger.info('BullMQ queues initialized');
-//   } catch (err) {
-//     logger.warn('BullMQ not available (Redis required):', err.message);
-//   }
-// }
 function initQueues() {
   try {
-    // 💡 Replace getRedis() with a direct fallback configuration object
-    const connection = {
-      host: process.env.REDIS_HOST || '127.0.0.1',
-      port: parseInt(process.env.REDIS_PORT) || 6379,
-      maxRetriesPerRequest: null // 👈 Crucial requirement for BullMQ
-    };
+    // 1. Grab your centralized connection instance that parses process.env.REDIS_URL
+    const connection = getRedis();
 
+    // 2. Safely tell BullMQ that retries are handled, satisfying its strict structural check
+    if (connection && connection.options) {
+      connection.options.maxRetriesPerRequest = null;
+    }
+
+    // 3. Initialize queues using the proper connected client instance
     queues.learning = new Queue('learning-events', { connection });
     queues.retention = new Queue('retention-calc', { connection });
 
+    // 4. Initialize workers to process the event channels
     workers.learning = new Worker('learning-events', processLearningEvent, { connection, concurrency: 5 });
     workers.retention = new Worker('retention-calc', processRetentionCalc, { connection, concurrency: 3 });
+
+    // 5. Setup event log listeners for diagnostic tracking
+    workers.learning.on('completed', job => logger.info(`Job ${job.id} completed`));
+    workers.learning.on('failed', (job, err) => logger.error(`Job ${job?.id} failed:`, err.message));
+
+    logger.info('BullMQ queues initialized successfully with process.env.REDIS_URL');
   } catch (err) {
     logger.warn('BullMQ not available (Redis required):', err.message);
   }
 }
+
 async function processLearningEvent(job) {
   const { type, userId, data } = job.data;
 
   switch (type) {
     case 'QUIZ_COMPLETED':
-      await onQuizCompleted(userId, data.score, data.totalPoints);
+      await onQuizCompleted(userId, data.score, data.totalPoints, { isDelta: data.isDelta || false });
+      const { checkAllBadges } = require('../services/gamificationService');
+      await checkAllBadges(userId);
       break;
     case 'COURSE_COMPLETED':
       await onCourseCompleted(userId);

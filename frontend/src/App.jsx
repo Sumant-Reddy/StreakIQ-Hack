@@ -17,6 +17,11 @@ import MockRoleplay from './pages/learner/MockRoleplay';
 import Leaderboard from './pages/learner/Leaderboard';
 import LearningPath from './pages/learner/LearningPath';
 import MyCoursesPage from './pages/learner/MyCoursesPage';
+import DocmostManager from './pages/admin/DocmostManager';
+import CertificationBuilder from './pages/admin/CertificationBuilder';
+import MyCertifications from './pages/learner/MyCertifications';
+import Certificate from './pages/learner/Certificate';
+import Badges from './pages/learner/Badges';
 
 function RoleRoute({ role, children }) {
   const { user, loading } = useAuth();
@@ -46,11 +51,14 @@ export default function App() {
           <Route path="/admin" element={<RoleRoute role={['ADMIN']}><AdminDashboard /></RoleRoute>} />
           <Route path="/admin/courses" element={<RoleRoute role={['ADMIN']}><CourseManager /></RoleRoute>} />
           <Route path="/admin/users" element={<RoleRoute role={['ADMIN']}><UserManager /></RoleRoute>} />
+          <Route path="/admin/docs" element={<RoleRoute><DocmostManager /></RoleRoute>} />
 
           <Route path="/manager" element={<RoleRoute role={['ADMIN','MANAGER']}><ManagerDashboard /></RoleRoute>} />
           <Route path="/manager/team/:userId" element={<RoleRoute role={['ADMIN','MANAGER']}><TeamAudit /></RoleRoute>} />
           <Route path="/manager/copilot" element={<RoleRoute role={['ADMIN','MANAGER']}><AICopilot /></RoleRoute>} />
           <Route path="/manager/certification" element={<RoleRoute role={['ADMIN','MANAGER']}><CertificationReadiness /></RoleRoute>} />
+          <Route path="/admin/certifications" element={<RoleRoute role={['ADMIN','MANAGER']}><CertificationBuilder /></RoleRoute>} />
+          <Route path="/manage/docs" element={<RoleRoute><DocmostManager /></RoleRoute>} />
 
           <Route path="/learn" element={<RoleRoute><LearnerDashboard /></RoleRoute>} />
           <Route path="/learn/course/:id" element={<RoleRoute><CoursePlayer /></RoleRoute>} />
@@ -60,6 +68,9 @@ export default function App() {
           <Route path="/learn/leaderboard" element={<RoleRoute><Leaderboard /></RoleRoute>} />
           <Route path="/learn/path" element={<RoleRoute><LearningPath /></RoleRoute>} />
           <Route path="/learn/courses" element={<RoleRoute><MyCoursesPage /></RoleRoute>} />
+          <Route path="/learn/certifications" element={<RoleRoute><MyCertifications /></RoleRoute>} />
+          <Route path="/learn/certificate/:certId" element={<RoleRoute><Certificate /></RoleRoute>} />
+          <Route path="/learn/badges" element={<RoleRoute><Badges /></RoleRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

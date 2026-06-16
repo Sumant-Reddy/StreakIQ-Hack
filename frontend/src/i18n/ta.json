@@ -13,7 +13,10 @@
     "overview": "கண்ணோட்டம்",
     "courses": "பாடநெறிகள்",
     "users": "பயனர்கள்",
-    "managerView": "மேலாளர் பார்வை"
+    "managerView": "மேலாளர் பார்வை",
+    "knowledgeBase": "அறிவுத்தளம்",
+    "certifications": "சான்றிதழ்கள்",
+    "teamReadiness": "குழு தயார்நிலை"
   },
   "auth": {
     "signIn": "உள்நுழைக",
@@ -125,7 +128,7 @@
     "riskHeatmap": "அபாய வரைபடம்",
     "interventions": "தலையீடுகள் (Interventions)",
     "certificationStatus": "சான்றிதழ் நிலை",
-    "ready": "தவறானவர்",
+    "ready": "தயாரானவர்",
     "notReady": "தயாராக இல்லை",
     "inProgress": "செயல்பாட்டில் உள்ளது",
     "copilotQuery": "உங்கள் AI கோபைலட்டிடம் கேளுங்கள்",
@@ -149,7 +152,7 @@
   "learningPath": {
     "myLearningPath": "கற்றல் பாதை",
     "pathDescription": "உங்கள் இலக்குகள் மற்றும் செயல்திறன் அடிப்படையிலான தனிப்பயனாக்கப்பட்ட கற்றல் பாதை.",
-    "aiPersonalizedPath": "تனிப்பயனாக்கப்பட்ட கற்றல் பாதை",
+    "aiPersonalizedPath": "தனிப்பயனாக்கப்பட்ட கற்றல் பாதை",
     "noPathAssigned": "பாதை ஒதுக்கப்பட்டுள்ளது",
     "noPathDescription": "இன்னும் கற்றல் பாதை எதுவும் ஒதுக்கப்படவில்லை",
     "startLearning": "கற்கத் தொடங்குங்கள்",
@@ -246,6 +249,8 @@
     "telugu": "தெலுங்கு",
     "tamil": "தமிழ்",
     "kannada": "கன்னடம்",
+    "marathi": "மராட்டி",
+    "bengali": "வங்காளம்",
     "back": "பின்னால்",
     "viewAll": "அனைத்தையும் பார்",
     "noData": "தரவு எதுவும் இல்லை"

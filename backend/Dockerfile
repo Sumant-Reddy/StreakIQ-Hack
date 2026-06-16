@@ -1,15 +1,17 @@
 FROM node:20-alpine
 
+# Install standard alpine system dependencies for Prisma
+RUN apk add --no-cache openssl direnv libc6-compat
+
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
-COPY prisma ./prisma
+COPY . .
+
+# Generate Prisma Client binary inside the container environment
 RUN npx prisma generate
 
-COPY src ./src
-
 EXPOSE 5000
-
-CMD ["node", "src/index.js"]
+CMD ["npm", "run", "dev"]

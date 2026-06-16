@@ -38,6 +38,7 @@ export const courseApi = {
   enroll: (id) => api.post(`/courses/${id}/enroll`),
   addModule: (courseId, data) => api.post(`/courses/${courseId}/modules`, data),
   recordWatch: (courseId, moduleId, data) => api.post(`/courses/${courseId}/modules/${moduleId}/watch`, data),
+  getNextQuiz: (courseId) => api.get(`/courses/${courseId}/next-quiz`).then(r => r.data),
 };
 
 export const quizApi = {
@@ -56,6 +57,8 @@ export const aiApi = {
   retention: (userId) => api.get(`/ai/retention/${userId}`),
   recommendations: (userId) => api.get(`/ai/recommendations/${userId}`),
   flashcards: (moduleId) => api.get(`/ai/flashcards/${moduleId}`),
+  ask: (data) => api.post('/ai/ask', data).then(r => r.data),
+  aiRecommendations: (userId) => api.get(`/ai/ai-recommendations/${userId}`).then(r => r.data),
 };
 
 export const managerApi = {
@@ -71,6 +74,9 @@ export const learnerApi = {
   learningPath: () => api.get('/learner/learning-path'),
   history: (params) => api.get('/learner/history', { params }),
   roleplays: () => api.get('/learner/roleplays'),
+  aiRecommendations: (userId) => api.get(`/ai/ai-recommendations/${userId}`).then(r => r.data),
+  certifications: () => api.get('/learner/certifications'),
+  getCertificate: (certId) => api.get(`/learner/certifications/${certId}/certificate`),
 };
 
 export const gamificationApi = {
@@ -91,6 +97,16 @@ export const adminApi = {
   invites: () => api.get('/admin/invites'),
   syncDocmost: () => api.post('/admin/sync-docmost'),
   docmostStatus: () => api.get('/admin/docmost/status'),
+  listDocuments: (params) => api.get('/admin/docmost/documents', { params }).then(r => r.data),
+  getDocument: (docmostId) => api.get(`/admin/docmost/documents/${docmostId}`).then(r => r.data),
+  createDocument: (data) => api.post('/admin/docmost/documents', data).then(r => r.data),
+  updateDocument: (docmostId, data) => api.put(`/admin/docmost/documents/${docmostId}`, data).then(r => r.data),
+  deleteDocument: (docmostId) => api.delete(`/admin/docmost/documents/${docmostId}`).then(r => r.data),
+  // Certifications
+  certifications: () => api.get('/admin/certifications'),
+  createCertification: (data) => api.post('/admin/certifications', data),
+  updateCertification: (id, data) => api.put(`/admin/certifications/${id}`, data),
+  deleteCertification: (id) => api.delete(`/admin/certifications/${id}`),
 };
 
 export const i18nApi = {

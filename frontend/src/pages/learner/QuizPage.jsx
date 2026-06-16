@@ -71,6 +71,27 @@ export default function QuizPage() {
                 <div className="text-xs text-gray-400">Points</div>
               </div>
             </div>
+              {result.previousBestPct !== null && result.previousBestPct !== undefined && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <div className="text-xs text-gray-400 text-center mb-2">vs. Your Previous Best</div>
+                  <div className="flex items-center justify-center gap-4 text-sm">
+                    <span className="text-gray-400">Before: {result.previousBestPct}%</span>
+                    <span className={result.percentage > result.previousBestPct ? 'text-emerald-400 font-bold' : 'text-red-400'}>
+                      {result.percentage > result.previousBestPct ? '▲' : result.percentage < result.previousBestPct ? '▼' : '='} {Math.abs(result.percentage - result.previousBestPct)}%
+                    </span>
+                    <span className="text-white">Now: {result.percentage}%</span>
+                  </div>
+                </div>
+              )}
+              {result.pointsEarned !== undefined && (
+                <div className="mt-3 text-center">
+                  {result.pointsEarned > 0 ? (
+                    <div className="text-emerald-400 text-sm font-medium">+{result.pointsEarned} points earned!</div>
+                  ) : (
+                    <div className="text-gray-400 text-xs">No new points — score not improved from previous attempt</div>
+                  )}
+                </div>
+              )}
           </div>
 
           <div className="card space-y-3">
@@ -108,6 +129,11 @@ export default function QuizPage() {
             <div className="w-48 h-1.5 bg-gray-800 rounded-full mt-1">
               <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width: `${((currentQ + 1) / quiz.questions?.length) * 100}%` }} />
             </div>
+              {quiz.attemptCount > 0 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Attempt #{quiz.attemptCount + 1} · Best: {quiz.bestPercentage}%
+                </div>
+              )}
           </div>
           {timeLeft !== null && (
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-mono font-bold ${timeLeft < 60 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-gray-800 text-white border border-gray-700'}`}>

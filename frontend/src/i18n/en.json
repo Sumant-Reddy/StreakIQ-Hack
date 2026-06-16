@@ -13,7 +13,8 @@
     "overview": "Overview",
     "courses": "Courses",
     "users": "Users",
-    "managerView": "Manager View"
+    "managerView": "Manager View",
+    "knowledgeBase": "Knowledge Base"
   },
   "auth": {
     "signIn": "Sign In",
@@ -247,6 +248,8 @@
     "telugu": "Telugu",
     "tamil": "Tamil",
     "kannada": "Kannada",
+    "marathi": "Marathi",
+    "bengali": "Bengali",
     "back": "Back",
     "viewAll": "View All",
     "noData": "No data available"

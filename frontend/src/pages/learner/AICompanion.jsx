@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { courseApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { Brain, Send, BookOpen, Sparkles, User, MessageSquare } from 'lucide-react';
-import { io } from 'socket.io-client';
+import { Brain, Send, BookOpen, Sparkles, User, MessageSquare, FileText } from 'lucide-react';
+import { useSocket } from '../../contexts/SocketContext';
 import { v4 as uuidv4 } from 'uuid';
 
 const SUGGESTIONS = [
@@ -19,6 +19,8 @@ const SUGGESTIONS = [
 export default function AICompanion() {
   const { user } = useAuth();
   const { t } = useTranslation();
+  const socket = useSocket(); // Pull the managed socket client instance
+
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "Hi! I'm YAMI, your AI learning companion. Ask me anything about your courses — diamond knowledge, selling techniques, customer handling, or any CaratLane training topic." }
   ]);
@@ -26,33 +28,37 @@ export default function AICompanion() {
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState('');
-  const [socket, setSocket] = useState(null);
   const sessionId = useRef(uuidv4());
   const bottomRef = useRef();
 
+  // Handle auto-scroll to latest message
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Handle data fetching & Socket event subscription
   useEffect(() => {
     courseApi.list({ limit: 20 }).then(d => setCourses(d.courses || [])).catch(() => {});
+    
+    if (!socket) return;
 
-    const token = localStorage.getItem('yami_token');
-    const sock = io('/', { auth: { token }, transports: ['websocket'] });
-    setSocket(sock);
-
-    sock.on('ai:response', ({ message }) => {
-      setMessages(prev => [...prev, { role: 'assistant', content: message }]);
+    // Set up listeners on the shared context socket
+    socket.on('ai:response', ({ message, sources }) => {
+      setMessages(prev => [...prev, { role: 'assistant', content: message, sources: sources || [] }]);
       setLoading(false);
     });
 
-    sock.on('ai:error', ({ message }) => {
+    socket.on('ai:error', ({ message }) => {
       setMessages(prev => [...prev, { role: 'assistant', content: `Sorry, I encountered an error: ${message}` }]);
       setLoading(false);
     });
 
-    return () => sock.disconnect();
-  }, []);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    // Cleanup listeners when component unmounts
+    return () => {
+      socket.off('ai:response');
+      socket.off('ai:error');
+    };
+  }, [socket]);
 
   const sendMessage = (text = input) => {
     if (!text.trim() || loading) return;
@@ -98,8 +104,19 @@ export default function AICompanion() {
               <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'assistant' ? 'bg-gradient-to-br from-brand-500 to-pink-500' : 'bg-gray-700'}`}>
                 {msg.role === 'assistant' ? <Brain className="w-4 h-4 text-white" /> : <User className="w-4 h-4 text-gray-300" />}
               </div>
-              <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === 'assistant' ? 'bg-gray-800 text-gray-100 rounded-tl-sm' : 'bg-brand-600 text-white rounded-tr-sm'}`}>
-                {msg.content}
+              <div className={`max-w-[80%] space-y-2 ${msg.role === 'user' ? 'items-end flex flex-col' : ''}`}>
+                <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === 'assistant' ? 'bg-gray-800 text-gray-100 rounded-tl-sm' : 'bg-brand-600 text-white rounded-tr-sm'}`}>
+                  {msg.content}
+                </div>
+                {msg.sources?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {msg.sources.map((src, si) => (
+                      <span key={si} className="flex items-center gap-1 text-xs bg-gray-900 border border-gray-700 text-gray-400 px-2 py-0.5 rounded-full">
+                        <FileText className="w-3 h-3 text-brand-400" />{src}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}

@@ -41,6 +41,12 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Static file serving for uploaded assets
+const path = require('path');
+const fs = require('fs');
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
 app.use(morgan('combined', { stream: { write: msg => logger.info(msg.trim()) } }));
 
 const limiter = rateLimit({
@@ -61,6 +67,8 @@ app.use('/api/learner', learnerRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
+const uploadRoutes = require('./routes/upload');
+app.use('/api', uploadRoutes);
 
 app.use(errorHandler);
 
@@ -70,6 +78,12 @@ initQueues();
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   logger.info(`YAMI Learn AI backend running on port ${PORT}`);
+  // Auto-seed badges on startup (upsert — safe to run every time)
+  const { seedBadges } = require('./services/gamificationService');
+  seedBadges().then(() => logger.info('Badges seeded')).catch(e => logger.warn('Badge seed failed:', e.message));
 });
-
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+}));
 module.exports = { app, server };

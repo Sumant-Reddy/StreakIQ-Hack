@@ -127,6 +127,7 @@ model Course {
   quizzes         Quiz[]
   learningPathCourses LearningPathCourse[]
   recommendations LearningRecommendation[]
+  certifications  CertificationCourse[]
 
   @@index([department])
   @@index([isPublished])
@@ -443,15 +444,43 @@ model SkillScore {
   @@index([userId])
 }
 
+model Certification {
+  id                   Int      @id @default(autoincrement())
+  name                 String
+  description          String?  @db.Text
+  minQuizScore         Int      @default(70)
+  minCourseCompletion  Int      @default(80)
+  isActive             Boolean  @default(true)
+  createdById          Int
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  courses CertificationCourse[]
+
+  @@index([isActive])
+}
+
+model CertificationCourse {
+  id              Int @id @default(autoincrement())
+  certificationId Int
+  courseId        Int
+
+  certification Certification @relation(fields: [certificationId], references: [id], onDelete: Cascade)
+  course        Course        @relation(fields: [courseId], references: [id])
+
+  @@unique([certificationId, courseId])
+}
+
 model DocmostDocument {
-  id          Int      @id @default(autoincrement())
-  docmostId   String   @unique
-  title       String
-  content     String   @db.LongText
-  spaceId     String?
-  embeddingId String?
+  id           Int      @id @default(autoincrement())
+  docmostId    String   @unique
+  title        String
+  content      String   @db.LongText
+  spaceId      String?
+  embeddingId  String?
+  chunkCount   Int      @default(0)
   lastSyncedAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt    DateTime @updatedAt
 
   @@index([spaceId])
 }
