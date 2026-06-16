@@ -60,7 +60,7 @@ app.use('/api/manager', managerRoutes);
 app.use('/api/learner', learnerRoutes);
 app.use('/api/gamification', gamificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/auth', adminRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.use(errorHandler);
 
