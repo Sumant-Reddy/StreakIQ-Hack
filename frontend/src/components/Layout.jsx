@@ -145,9 +145,11 @@ export default function Layout({ children, title }) {
                 {[
                   { code: 'en', label: 'English' },
                   { code: 'hi', label: 'हिंदी' },
-                  { code: 'te', label: 'తెలుగు' },
                   { code: 'ta', label: 'தமிழ்' },
                   { code: 'kn', label: 'ಕನ್ನಡ' },
+                  { code: 'te', label: 'తెలుగు' },
+                  { code: 'mr', label: 'मराठी' },
+                  { code: 'bn', label: 'বাংলা' },
                 ].map(lang => (
                   <button
                     key={lang.code}
