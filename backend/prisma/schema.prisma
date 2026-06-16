@@ -48,6 +48,20 @@ enum InterventionType {
   MANAGER_ALERT
 }
 
+enum Language {
+  EN
+  HI
+  TE
+  TA
+  KN
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
 model User {
   id             Int      @id @default(autoincrement())
   email          String   @unique
@@ -59,6 +73,12 @@ model User {
   managerId      Int?
   avatarUrl      String?
   isActive       Boolean  @default(true)
+  language       Language   @default(EN)
+  status         UserStatus @default(ACTIVE)
+  inviteToken    String?    @unique
+  inviteExpiry   DateTime?
+  storeCode      String?
+  region         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -94,6 +114,11 @@ model Course {
   estimatedHours  Float       @default(0)
   isPublished     Boolean     @default(false)
   createdById     Int
+  titleHi        String?
+  titleTe        String?
+  descriptionHi  String?   @db.Text
+  descriptionTe  String?   @db.Text
+  isMandatory    Boolean   @default(false)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -111,6 +136,8 @@ model Module {
   id          Int         @id @default(autoincrement())
   courseId    Int
   title       String
+  titleHi        String?
+  titleTe        String?
   description String?
   order       Int
   contentType ContentType
@@ -414,4 +441,17 @@ model SkillScore {
 
   @@unique([userId, skill])
   @@index([userId])
+}
+
+model DocmostDocument {
+  id          Int      @id @default(autoincrement())
+  docmostId   String   @unique
+  title       String
+  content     String   @db.LongText
+  spaceId     String?
+  embeddingId String?
+  lastSyncedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([spaceId])
 }

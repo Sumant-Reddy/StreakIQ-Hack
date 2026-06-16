@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { Zap, Eye, EyeOff, Brain, BarChart3, Trophy } from 'lucide-react';
 
 const DEMO_ACCOUNTS = [
-  { label: 'Admin', email: 'admin@catratlane.com', password: 'admin123', color: 'brand' },
-  { label: 'Manager', email: 'manager@catratlane.com', password: 'manager123', color: 'yellow' },
-  { label: 'Learner (JC)', email: 'rahul@catratlane.com', password: 'learner123', color: 'green' },
+  { label: 'Admin', email: 'admin@caratlane.com', password: 'admin@123', color: 'brand' },
+  { label: 'Manager', email: 'manager@caratlane.com', password: 'manager@123', color: 'yellow' },
+  { label: 'Learner (JC)', email: 'rahul@caratlane.com', password: 'learner123', color: 'green' },
 ];
 
 export default function Login() {
@@ -17,6 +18,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,7 +28,7 @@ export default function Login() {
       const user = await login(email, password);
       navigate(user.role === 'ADMIN' ? '/admin' : user.role === 'MANAGER' ? '/manager' : '/learn');
     } catch (err) {
-      setError(err.error || 'Invalid credentials');
+      setError(err.error || t('auth.invalidCredentials'));
     } finally {
       setLoading(false);
     }
@@ -52,22 +54,22 @@ export default function Login() {
               <Zap className="w-7 h-7 text-white" />
             </div>
             <div>
-              <div className="text-2xl font-bold text-white">YAMI Learn</div>
-              <div className="text-sm text-brand-400">AI Learning Operating System</div>
+              <div className="text-2xl font-bold text-white">{t('auth.brandName')}</div>
+              <div className="text-sm text-brand-400">{t('auth.subtitle')}</div>
             </div>
           </div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-            Transform How<br />CaratLane Learns
+            {t('auth.heroTitle')}
           </h1>
           <p className="text-gray-400 text-lg mb-10 leading-relaxed">
-            AI-powered knowledge retention, skill tracking, and personalized learning paths for every jewelry consultant.
+            {t('auth.heroDesc')}
           </p>
           <div className="space-y-4">
             {[
-              { icon: Brain, label: 'AI Quiz Generator', desc: 'Auto-generate quizzes from any course material' },
-              { icon: BarChart3, label: 'Retention Score Engine', desc: '5-factor knowledge retention tracking' },
-              { icon: Trophy, label: 'AI Mock Customer Roleplay', desc: 'Practice with AI customers, get scored instantly' },
-            ].map(f => (
+              { icon: Brain, label: t('auth.feature1Label'), desc: t('auth.feature1Desc') },
+              { icon: BarChart3, label: t('auth.feature2Label'), desc: t('auth.feature2Desc') },
+              { icon: Trophy, label: t('auth.feature3Label'), desc: t('auth.feature3Desc') },
+            ].map((f, index) => (
               <div key={f.label} className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-xl p-4">
                 <div className="w-10 h-10 rounded-lg bg-brand-500/20 flex items-center justify-center">
                   <f.icon className="w-5 h-5 text-brand-400" />
@@ -89,20 +91,20 @@ export default function Login() {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-pink-500 flex items-center justify-center">
               <Zap className="w-6 h-6 text-white" />
             </div>
-            <div className="text-xl font-bold text-white">YAMI Learn AI</div>
+            <div className="text-xl font-bold text-white">{t('auth.brandNameMobile')}</div>
           </div>
 
           <div className="card">
-            <h2 className="text-xl font-bold text-white mb-1">Welcome back</h2>
-            <p className="text-sm text-gray-400 mb-6">Sign in to your learning dashboard</p>
+            <h2 className="text-xl font-bold text-white mb-1">{t('auth.welcome')}</h2>
+            <p className="text-sm text-gray-400 mb-6">{t('auth.welcomeSubtitle')}</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="text-xs text-gray-400 mb-1.5 block">Email</label>
-                <input className="input w-full" type="email" placeholder="you@catratlane.com" value={email} onChange={e => setEmail(e.target.value)} required />
+                <label className="text-xs text-gray-400 mb-1.5 block">{t('auth.email')}</label>
+                <input className="input w-full" type="email" placeholder="you@caratlane.com" value={email} onChange={e => setEmail(e.target.value)} required />
               </div>
               <div>
-                <label className="text-xs text-gray-400 mb-1.5 block">Password</label>
+                <label className="text-xs text-gray-400 mb-1.5 block">{t('auth.password')}</label>
                 <div className="relative">
                   <input className="input w-full pr-10" type={showPw ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
                   <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300" onClick={() => setShowPw(!showPw)}>
@@ -113,12 +115,12 @@ export default function Login() {
               {error && <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{error}</div>}
               <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-2.5">
                 {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? t('auth.signingIn') : t('auth.signIn')}
               </button>
             </form>
 
             <div className="mt-6 pt-5 border-t border-gray-800">
-              <p className="text-xs text-gray-500 mb-3 text-center">Quick Demo Access</p>
+              <p className="text-xs text-gray-500 mb-3 text-center">{t('auth.quickDemoAccess')}</p>
               <div className="grid grid-cols-3 gap-2">
                 {DEMO_ACCOUNTS.map(acc => (
                   <button key={acc.label} onClick={() => fillDemo(acc)}

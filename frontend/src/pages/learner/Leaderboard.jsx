@@ -1,17 +1,23 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { gamificationApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Trophy, Medal, Star, Flame, Crown } from 'lucide-react';
 
-const PERIOD_LABELS = { all: 'All Time', weekly: 'This Week', monthly: 'This Month' };
-
 export default function Leaderboard() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [badges, setBadges] = useState([]);
   const [period, setPeriod] = useState('all');
   const [loading, setLoading] = useState(true);
+
+  const PERIOD_LABELS = {
+    all: t('leaderboard.allTime'),
+    weekly: t('leaderboard.weekly'),
+    monthly: t('leaderboard.monthly'),
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -32,7 +38,7 @@ export default function Leaderboard() {
   };
 
   return (
-    <Layout title="Leaderboard">
+    <Layout title={t('leaderboard.title')}>
       <div className="max-w-4xl space-y-6">
         {/* Period tabs */}
         <div className="flex gap-2">
@@ -52,7 +58,7 @@ export default function Leaderboard() {
             <div className="lg:col-span-2 card space-y-2">
               <div className="flex items-center justify-between pb-3 border-b border-gray-800">
                 <h3 className="font-semibold text-white flex items-center gap-2"><Trophy className="w-4 h-4 text-yellow-400" /> Top Learners</h3>
-                {data?.myRank && <span className="text-xs text-brand-400">Your rank: #{data.myRank}</span>}
+                {data?.myRank && <span className="text-xs text-brand-400">{t('leaderboard.rank')}: #{data.myRank}</span>}
               </div>
               {data?.leaderboard?.map((entry) => {
                 const isMe = entry.userId === user?.id;
@@ -64,13 +70,13 @@ export default function Leaderboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-white flex items-center gap-2">
-                        {entry.name} {isMe && <span className="text-xs text-brand-400">(you)</span>}
+                        {entry.name} {isMe && <span className="text-xs text-brand-400">({t('leaderboard.you')})</span>}
                       </div>
                       <div className="text-xs text-gray-400">{entry.department}</div>
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-white">{entry.points?.toLocaleString()}</div>
-                      <div className="text-xs text-gray-500">points</div>
+                      <div className="text-xs text-gray-500">{t('leaderboard.points')}</div>
                     </div>
                   </div>
                 );

@@ -40,6 +40,38 @@ services:
     networks:
       - yami-network
 
+  docmost-db:
+    image: postgres:16-alpine
+    container_name: yami-docmost-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: docmost
+      POSTGRES_USER: docmost
+      POSTGRES_PASSWORD: docmost123
+    volumes:
+      - docmost_db_data:/var/lib/postgresql/data
+    networks:
+      - yami-network
+
+  docmost:
+    image: docmost/docmost:latest
+    container_name: yami-docmost
+    restart: unless-stopped
+    ports:
+      - '3001:3000'
+    environment:
+      APP_URL: http://localhost:3001
+      DATABASE_URL: postgresql://docmost:docmost123@docmost-db:5432/docmost
+      REDIS_URL: redis://redis:6379
+      APP_SECRET: changeme-docmost-secret-32chars-min
+    depends_on:
+      - docmost-db
+      - redis
+    volumes:
+      - docmost_data:/app/data
+    networks:
+      - yami-network
+
   backend:
     build:
       context: ./backend
@@ -52,10 +84,14 @@ services:
       DATABASE_URL: mysql://yami:yami123@mysql:3306/yami
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
+      DOCMOST_URL: http://docmost:3000
+      DOCMOST_API_KEY: ${DOCMOST_API_KEY:-}
+      FRONTEND_URL: http://localhost:3000
     depends_on:
       - mysql
       - redis
       - qdrant
+      - docmost
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -79,6 +115,8 @@ volumes:
   mysql_data:
   redis_data:
   qdrant_data:
+  docmost_db_data:
+  docmost_data:
 
 networks:
   yami-network:

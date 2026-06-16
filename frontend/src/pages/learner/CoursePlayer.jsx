@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { courseApi, aiApi } from '../../services/api';
 import { BookOpen, FileText, Play, CheckCircle, Clock, ChevronRight, Brain, Layers, Star, Lock } from 'lucide-react';
@@ -8,6 +9,7 @@ const CONTENT_ICONS = { VIDEO: Play, PDF: FileText, PPT: Layers, SOP: FileText, 
 
 export default function CoursePlayer() {
   const { id } = useParams();
+  const { t } = useTranslation();
   const [course, setCourse] = useState(null);
   const [activeModule, setActiveModule] = useState(null);
   const [flashcards, setFlashcards] = useState([]);
@@ -46,8 +48,8 @@ export default function CoursePlayer() {
     }
   };
 
-  if (loading) return <Layout title="Course"><div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full" /></div></Layout>;
-  if (!course) return <Layout title="Course"><div className="text-gray-400 text-center mt-20">Course not found</div></Layout>;
+  if (loading) return <Layout title={t('nav.myCourses')}><div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full" /></div></Layout>;
+  if (!course) return <Layout title={t('nav.myCourses')}><div className="text-gray-400 text-center mt-20">{t('course.courseNotFound')}</div></Layout>;
 
   return (
     <Layout title={course.title}>
@@ -56,8 +58,8 @@ export default function CoursePlayer() {
           {/* Module list */}
           <div className="card space-y-3">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-white">Course Content</h3>
-              <span className="text-xs text-gray-400">{course.modules?.length} modules</span>
+              <h3 className="font-semibold text-white">{t('course.courseContent')}</h3>
+              <span className="text-xs text-gray-400">{course.modules?.length} {t('course.modules')}</span>
             </div>
             {course.modules?.map((m, i) => {
               const Icon = CONTENT_ICONS[m.contentType] || BookOpen;
@@ -72,7 +74,7 @@ export default function CoursePlayer() {
                     <div className="text-sm font-medium text-white truncate">{m.title}</div>
                     <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                       <Clock className="w-3 h-3" />
-                      {Math.round(m.duration / 60)} min · {m.contentType}
+                      {Math.round(m.duration / 60)} {t('course.min')} · {m.contentType}
                     </div>
                   </div>
                 </button>
@@ -99,17 +101,17 @@ export default function CoursePlayer() {
             {!course.enrolled ? (
               <div className="card text-center py-12">
                 <Lock className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <h3 className="font-semibold text-white mb-2">Enroll to Start Learning</h3>
-                <p className="text-gray-400 text-sm mb-5">Get access to all modules, AI companion, and assessments</p>
-                <button onClick={handleEnroll} className="btn-primary px-8 py-2.5">Enroll Now</button>
+                <h3 className="font-semibold text-white mb-2">{t('course.enrollToStart')}</h3>
+                <p className="text-gray-400 text-sm mb-5">{t('course.getAccessToModules')}</p>
+                <button onClick={handleEnroll} className="btn-primary px-8 py-2.5">{t('course.enrollNow')}</button>
               </div>
             ) : activeModule ? (
               <>
                 {showFlashcards ? (
                   <div className="card">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-white">AI Flashcards</h3>
-                      <button onClick={() => setShowFlashcards(false)} className="text-xs text-gray-400 hover:text-white">Close</button>
+                      <h3 className="font-semibold text-white">{t('course.aiFlashcards')}</h3>
+                      <button onClick={() => setShowFlashcards(false)} className="text-xs text-gray-400 hover:text-white">{t('common.close')}</button>
                     </div>
                     {flashcards.length > 0 ? (
                       <div className="text-center">
@@ -117,18 +119,18 @@ export default function CoursePlayer() {
                         <div className="min-h-40 flex items-center justify-center bg-gray-800 rounded-xl p-6 cursor-pointer border-2 border-dashed border-gray-700 hover:border-brand-500/50 transition-colors"
                           onClick={() => setCardFlipped(!cardFlipped)}>
                           <div className="text-center">
-                            <div className="text-xs text-brand-400 mb-2">{cardFlipped ? 'ANSWER' : 'QUESTION'}</div>
+                            <div className="text-xs text-brand-400 mb-2">{cardFlipped ? t('course.answer') : t('course.question')}</div>
                             <div className="text-white font-medium">{cardFlipped ? flashcards[cardIndex]?.back : flashcards[cardIndex]?.front}</div>
-                            {!cardFlipped && <div className="text-xs text-gray-500 mt-3">Tap to reveal answer</div>}
+                            {!cardFlipped && <div className="text-xs text-gray-500 mt-3">{t('course.tapToReveal')}</div>}
                           </div>
                         </div>
                         <div className="flex justify-center gap-3 mt-4">
-                          <button onClick={() => { setCardIndex(Math.max(0, cardIndex - 1)); setCardFlipped(false); }} disabled={cardIndex === 0} className="btn-secondary text-sm px-4">Previous</button>
-                          <button onClick={() => { setCardIndex(Math.min(flashcards.length - 1, cardIndex + 1)); setCardFlipped(false); }} disabled={cardIndex === flashcards.length - 1} className="btn-primary text-sm px-4">Next</button>
+                          <button onClick={() => { setCardIndex(Math.max(0, cardIndex - 1)); setCardFlipped(false); }} disabled={cardIndex === 0} className="btn-secondary text-sm px-4">{t('course.previous')}</button>
+                          <button onClick={() => { setCardIndex(Math.min(flashcards.length - 1, cardIndex + 1)); setCardFlipped(false); }} disabled={cardIndex === flashcards.length - 1} className="btn-primary text-sm px-4">{t('course.next')}</button>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-8 text-gray-400">No flashcards available. Generate them first.</div>
+                      <div className="text-center py-8 text-gray-400">{t('course.noFlashcards')}</div>
                     )}
                   </div>
                 ) : (
@@ -136,14 +138,14 @@ export default function CoursePlayer() {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="font-semibold text-white">{activeModule.title}</h3>
-                        <p className="text-xs text-gray-400">{activeModule.contentType} · {Math.round(activeModule.duration / 60)} min</p>
+                        <p className="text-xs text-gray-400">{activeModule.contentType} · {Math.round(activeModule.duration / 60)} {t('course.min')}</p>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => loadFlashcards(activeModule.id)} className="btn-secondary text-xs py-1.5 flex items-center gap-1.5">
-                          <Brain className="w-3.5 h-3.5" /> Flashcards
+                          <Brain className="w-3.5 h-3.5" /> {t('course.aiFlashcards')}
                         </button>
                         <Link to="/learn/ai-companion" className="btn-primary text-xs py-1.5 flex items-center gap-1.5">
-                          <Brain className="w-3.5 h-3.5" /> Ask AI
+                          <Brain className="w-3.5 h-3.5" /> {t('course.askAI')}
                         </Link>
                       </div>
                     </div>
@@ -154,17 +156,17 @@ export default function CoursePlayer() {
                           <div className="w-16 h-16 rounded-full bg-brand-500/20 flex items-center justify-center mx-auto mb-3 cursor-pointer hover:bg-brand-500/30 transition-colors" onClick={handleVideoEnd}>
                             <Play className="w-8 h-8 text-brand-400" />
                           </div>
-                          <div className="text-gray-400 text-sm">Video Player</div>
+                          <div className="text-gray-400 text-sm">{t('course.videoPlayer')}</div>
                           <div className="text-xs text-gray-600 mt-1">{activeModule.contentUrl}</div>
-                          <button onClick={handleVideoEnd} className="btn-primary text-xs mt-3 px-4 py-1.5">Mark as Watched</button>
+                          <button onClick={handleVideoEnd} className="btn-primary text-xs mt-3 px-4 py-1.5">{t('course.markAsWatched')}</button>
                         </div>
                       </div>
                     ) : (
                       <div className="bg-gray-800 rounded-xl p-6 min-h-48 flex items-center justify-center border border-gray-700">
                         <div className="text-center">
                           <FileText className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                          <div className="text-gray-400 text-sm">{activeModule.contentType} Document</div>
-                          <a href={activeModule.contentUrl} target="_blank" rel="noreferrer" className="btn-primary text-xs mt-3 px-4 py-1.5 inline-block">Open Document</a>
+                          <div className="text-gray-400 text-sm">{activeModule.contentType} {t('course.document')}</div>
+                          <a href={activeModule.contentUrl} target="_blank" rel="noreferrer" className="btn-primary text-xs mt-3 px-4 py-1.5 inline-block">{t('course.openDocument')}</a>
                         </div>
                       </div>
                     )}
@@ -173,7 +175,7 @@ export default function CoursePlayer() {
                       <div className="mt-4 bg-brand-500/10 border border-brand-500/20 rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-2">
                           <Brain className="w-4 h-4 text-brand-400" />
-                          <span className="text-xs font-semibold text-brand-400">AI Summary</span>
+                          <span className="text-xs font-semibold text-brand-400">{t('course.aiSummary')}</span>
                         </div>
                         <p className="text-sm text-gray-300 leading-relaxed">{activeModule.aiSummary}</p>
                       </div>
@@ -182,7 +184,7 @@ export default function CoursePlayer() {
                 )}
               </>
             ) : (
-              <div className="card text-center py-12 text-gray-400">Select a module to start</div>
+              <div className="card text-center py-12 text-gray-400">{t('course.selectModule')}</div>
             )}
           </div>
         </div>

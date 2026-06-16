@@ -27,6 +27,7 @@ export const authApi = {
   register: (data) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
   updateProfile: (data) => api.put('/auth/me', data),
+  acceptInvite: (token, data) => api.post(`/auth/accept-invite/${token}`, data),
 };
 
 export const courseApi = {
@@ -81,6 +82,19 @@ export const gamificationApi = {
 export const analyticsApi = {
   adminOverview: () => api.get('/analytics/admin/overview'),
   learningTrends: (params) => api.get('/analytics/learning-trends', { params }),
+};
+
+export const adminApi = {
+  users: (params) => api.get('/admin/users', { params }),
+  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  invite: (data) => api.post('/admin/invite', data),
+  invites: () => api.get('/admin/invites'),
+  syncDocmost: () => api.post('/admin/sync-docmost'),
+  docmostStatus: () => api.get('/admin/docmost/status'),
+};
+
+export const i18nApi = {
+  setLanguage: (language) => api.put('/auth/me/language', { language }),
 };
 
 export default api;

@@ -1,22 +1,25 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { aiApi } from '../../services/api';
 import { Brain, Send, Sparkles, User, BarChart3 } from 'lucide-react';
 
-const QUICK_QUERIES = [
-  'Show employees at risk of failing certification',
-  'Who has the lowest retention score in my team?',
-  'Which team members need communication training?',
-  'Show top performers this month',
-  'Who has been inactive for more than 7 days?',
-  'Which skill has the biggest gap across the team?',
-];
-
 export default function AICopilot() {
+  const { t } = useTranslation();
+
+  const QUICK_QUERIES = [
+    t('manager.quickQuery1'),
+    t('manager.quickQuery2'),
+    t('manager.quickQuery3'),
+    t('manager.quickQuery4'),
+    t('manager.quickQuery5'),
+    t('manager.quickQuery6'),
+  ];
+
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: "Hello! I'm your AI Manager Copilot. Ask me anything about your team's learning performance, risk levels, certification readiness, or skill gaps.",
+      content: t('manager.greeting'),
     },
   ]);
   const [input, setInput] = useState('');
@@ -33,14 +36,14 @@ export default function AICopilot() {
       const result = await aiApi.copilotQuery({ query: q });
       setMessages(prev => [...prev, { role: 'assistant', content: result.insight, data: result.teamSummary }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I could not process your query. Please try again.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: t('manager.errorMessage') }]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Layout title="AI Manager Copilot">
+    <Layout title={t('manager.copilotQuery')}>
       <div className="max-w-4xl mx-auto h-[calc(100vh-140px)] flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center gap-3 bg-gradient-to-r from-brand-600/20 to-pink-600/20 border border-brand-500/30 rounded-xl p-4">
@@ -48,8 +51,8 @@ export default function AICopilot() {
             <Brain className="w-5 h-5 text-brand-400" />
           </div>
           <div>
-            <div className="font-semibold text-white">AI Manager Copilot</div>
-            <div className="text-xs text-gray-400">Powered by YAMI AI — Ask anything about your team</div>
+            <div className="font-semibold text-white">{t('manager.copilotQuery')}</div>
+            <div className="text-xs text-gray-400">{t('manager.poweredBy')}</div>
           </div>
         </div>
 
@@ -67,20 +70,20 @@ export default function AICopilot() {
                 {msg.data && (
                   <div className="bg-gray-800/80 border border-gray-700 rounded-xl p-3 w-full">
                     <div className="flex items-center gap-1.5 text-xs text-brand-400 mb-2.5 font-medium">
-                      <BarChart3 className="w-3.5 h-3.5" /> Team Data Summary
+                      <BarChart3 className="w-3.5 h-3.5" /> {t('manager.teamDataSummary')}
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs text-center">
                       <div className="bg-gray-700 rounded-lg p-2">
                         <div className="font-bold text-white">{msg.data.total}</div>
-                        <div className="text-gray-400">Members</div>
+                        <div className="text-gray-400">{t('manager.members')}</div>
                       </div>
                       <div className="bg-gray-700 rounded-lg p-2">
                         <div className="font-bold text-emerald-400">{msg.data.data?.filter(d => d.riskLevel === 'LOW').length || 0}</div>
-                        <div className="text-gray-400">Low Risk</div>
+                        <div className="text-gray-400">{t('manager.lowRisk')}</div>
                       </div>
                       <div className="bg-gray-700 rounded-lg p-2">
                         <div className="font-bold text-red-400">{msg.data.data?.filter(d => ['HIGH','CRITICAL'].includes(d.riskLevel)).length || 0}</div>
-                        <div className="text-gray-400">At Risk</div>
+                        <div className="text-gray-400">{t('manager.atRiskLabel')}</div>
                       </div>
                     </div>
                   </div>
@@ -112,7 +115,7 @@ export default function AICopilot() {
 
         {/* Input */}
         <div className="flex gap-3">
-          <input className="input flex-1" placeholder="Ask about your team..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && query()} />
+          <input className="input flex-1" placeholder={t('manager.placeholder')} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && query()} />
           <button onClick={() => query()} disabled={loading || !input.trim()} className="btn-primary w-11 h-11 p-0 flex items-center justify-center shrink-0 disabled:opacity-50">
             <Send className="w-4 h-4" />
           </button>

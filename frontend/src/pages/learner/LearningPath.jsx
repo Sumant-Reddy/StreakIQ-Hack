@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { learnerApi, aiApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,6 +8,7 @@ import { Target, BookOpen, CheckCircle, Circle, Zap, ChevronRight } from 'lucide
 
 export default function LearningPath() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [paths, setPaths] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,15 +21,15 @@ export default function LearningPath() {
   }, [user.id]);
 
   return (
-    <Layout title="My Learning Path">
+    <Layout title={t('learningPath.myLearningPath')}>
       <div className="max-w-4xl space-y-6">
         <div className="bg-gradient-to-r from-emerald-600/20 to-brand-600/20 border border-emerald-500/30 rounded-xl p-5 flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl bg-emerald-500/30 flex items-center justify-center shrink-0">
             <Target className="w-6 h-6 text-emerald-400" />
           </div>
           <div>
-            <h2 className="font-bold text-white">AI-Personalized Learning Path</h2>
-            <p className="text-sm text-gray-400 mt-1">Your curriculum is tailored based on your quiz scores, watch behavior, and knowledge gaps.</p>
+            <h2 className="font-bold text-white">{t('learningPath.aiPersonalizedPath')}</h2>
+            <p className="text-sm text-gray-400 mt-1">{t('learningPath.pathDescription')}</p>
           </div>
         </div>
 
@@ -40,7 +42,7 @@ export default function LearningPath() {
                 <div key={up.id} className="card space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold text-white">{up.learningPath.title}</h3>
-                    <div className="text-xs text-gray-400">{Math.round(up.progressPercent)}% complete</div>
+                    <div className="text-xs text-gray-400">{Math.round(up.progressPercent)}{t('learningPath.percentComplete')}</div>
                   </div>
                   <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-emerald-500 to-brand-500 rounded-full" style={{ width: `${up.progressPercent}%` }} />
@@ -63,14 +65,14 @@ export default function LearningPath() {
             ) : (
               <div className="card text-center py-10">
                 <Target className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <h3 className="font-medium text-white mb-1">No learning path assigned yet</h3>
-                <p className="text-sm text-gray-400">Your manager or admin will assign a learning path, or explore courses below.</p>
+                <h3 className="font-medium text-white mb-1">{t('learningPath.noPathAssigned')}</h3>
+                <p className="text-sm text-gray-400">{t('learningPath.noPathDescription')}</p>
               </div>
             )}
 
             {recommendations.length > 0 && (
               <div className="space-y-3">
-                <h3 className="font-semibold text-white flex items-center gap-2"><Zap className="w-4 h-4 text-brand-400" /> AI Recommendations</h3>
+                <h3 className="font-semibold text-white flex items-center gap-2"><Zap className="w-4 h-4 text-brand-400" /> {t('dashboard.aiRecommendations')}</h3>
                 {recommendations.map((r, i) => (
                   <Link key={i} to={`/learn/course/${r.courseId}`}
                     className="flex items-center gap-4 card hover:border-brand-500/40 hover:bg-gray-800/80 transition-all group">

@@ -1,21 +1,38 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
-import { courseApi, aiApi } from '../../services/api';
-import { Plus, BookOpen, Edit, Eye, Brain, FileText, X, CheckCircle, Loader } from 'lucide-react';
+import { courseApi, aiApi, adminApi } from '../../services/api';
+import { Plus, BookOpen, Edit, Eye, Brain, FileText, X, CheckCircle, Loader, RefreshCw } from 'lucide-react';
 
 export default function CourseManager() {
+  const { t } = useTranslation();
   const [courses, setCourses] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [showQuizGen, setShowQuizGen] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [quizGenLoading, setQuizGenLoading] = useState(false);
   const [generatedQuiz, setGeneratedQuiz] = useState(null);
 
   const [form, setForm] = useState({
-    title: '', description: '', department: 'Retail', tags: '', estimatedHours: 2, isPublished: false
+    title: '', description: '', department: 'Retail', tags: '', estimatedHours: 2, isPublished: false,
+    titleHi: '', titleTe: '', descriptionHi: '', descriptionTe: '', isMandatory: false
   });
+  const [moduleForm, setModuleForm] = useState({ contentType: 'VIDEO', contentUrl: '' });
   const [quizForm, setQuizForm] = useState({ content: '', contentType: 'PDF', difficulty: 'MEDIUM', count: 5 });
+
+  const syncDocmost = async () => {
+    setSyncing(true);
+    try {
+      await adminApi.syncDocmost();
+      alert('Docmost sync started in background');
+    } catch (err) {
+      alert('Sync failed: ' + (err.error || err.message));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     courseApi.list({ limit: 50 }).then(d => setCourses(d.courses || [])).catch(console.error).finally(() => setLoading(false));
@@ -28,7 +45,7 @@ export default function CourseManager() {
       const course = await courseApi.create(form);
       setCourses(prev => [course, ...prev]);
       setShowForm(false);
-      setForm({ title: '', description: '', department: 'Retail', tags: '', estimatedHours: 2, isPublished: false });
+      setForm({ title: '', description: '', department: 'Retail', tags: '', estimatedHours: 2, isPublished: false, titleHi: '', titleTe: '', descriptionHi: '', descriptionTe: '', isMandatory: false });
     } catch (err) {
       alert(err.error || 'Failed to create course');
     } finally {
@@ -60,9 +77,16 @@ export default function CourseManager() {
       <div className="max-w-5xl space-y-5">
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-400">{courses.length} courses</p>
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
-            <Plus className="w-4 h-4" /> New Course
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={syncDocmost} disabled={syncing}
+              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-2 rounded-lg text-sm transition-all disabled:opacity-50">
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? t('admin.syncing') : t('admin.syncDocmost')}
+            </button>
+            <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2">
+              <Plus className="w-4 h-4" /> New Course
+            </button>
+          </div>
         </div>
 
         {/* Create form */}
@@ -91,6 +115,30 @@ export default function CourseManager() {
                 <textarea className="input w-full h-20 resize-none" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Course description..." />
               </div>
               <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.titleHindi')}</label>
+                <input value={form.titleHi || ''} onChange={e => setForm(f => ({...f, titleHi: e.target.value}))}
+                  placeholder="हिंदी में शीर्षक (optional)"
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.titleTelugu')}</label>
+                <input value={form.titleTe || ''} onChange={e => setForm(f => ({...f, titleTe: e.target.value}))}
+                  placeholder="తెలుగులో శీర్షిక (optional)"
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.descriptionHindi')}</label>
+                <textarea value={form.descriptionHi || ''} onChange={e => setForm(f => ({...f, descriptionHi: e.target.value}))}
+                  rows={2} placeholder="हिंदी में विवरण (optional)"
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500 resize-none" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.descriptionTelugu')}</label>
+                <textarea value={form.descriptionTe || ''} onChange={e => setForm(f => ({...f, descriptionTe: e.target.value}))}
+                  rows={2} placeholder="తెలుగులో వివరణ (optional)"
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500 resize-none" />
+              </div>
+              <div>
                 <label className="text-xs text-gray-400 block mb-1">Tags (comma-separated)</label>
                 <input className="input w-full" value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="diamond,4c,fundamentals" />
               </div>
@@ -99,11 +147,17 @@ export default function CourseManager() {
                 <input className="input w-full" type="number" min="0.5" step="0.5" value={form.estimatedHours} onChange={e => setForm(f => ({ ...f, estimatedHours: parseFloat(e.target.value) }))} />
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" className="rounded" checked={form.isPublished} onChange={e => setForm(f => ({ ...f, isPublished: e.target.checked }))} />
                 <span className="text-sm text-gray-300">Publish immediately</span>
               </label>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="isMandatory" checked={form.isMandatory || false}
+                  onChange={e => setForm(f => ({...f, isMandatory: e.target.checked}))}
+                  className="rounded border-gray-600 bg-gray-800 text-brand-500" />
+                <label htmlFor="isMandatory" className="text-sm text-gray-300">{t('course.mandatory')} — new JCs auto-enrolled</label>
+              </div>
               <div className="ml-auto flex gap-2">
                 <button onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
                 <button onClick={handleCreate} disabled={saving || !form.title} className="btn-primary flex items-center gap-2">
@@ -112,6 +166,53 @@ export default function CourseManager() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Module Content Input Panel */}
+        {showForm && (
+          <div className="card border-gray-700 space-y-4">
+            <h3 className="font-semibold text-white text-sm">Module Content Preview</h3>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Content Type</label>
+              <select className="input w-full text-sm" value={moduleForm.contentType} onChange={e => setModuleForm(f => ({ ...f, contentType: e.target.value, contentUrl: '' }))}>
+                {['VIDEO', 'PDF', 'SOP', 'PPT', 'ARTICLE'].map(ct => <option key={ct} value={ct}>{ct}</option>)}
+              </select>
+            </div>
+            {moduleForm.contentType === 'VIDEO' && (
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.videoUrl')}</label>
+                <input value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
+                  placeholder="https://..."
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
+              </div>
+            )}
+            {(moduleForm.contentType === 'PDF' || moduleForm.contentType === 'SOP') && (
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.documentUrl')}</label>
+                <input value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
+                  placeholder="S3 URL or direct link to PDF/Doc"
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
+                <p className="text-xs text-gray-500 mt-1">Supports PDF, Word docs, and SOP documents</p>
+              </div>
+            )}
+            {moduleForm.contentType === 'PPT' && (
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.pptUrl')}</label>
+                <input value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
+                  placeholder="Google Slides share URL or PowerPoint S3 URL"
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500" />
+                <p className="text-xs text-gray-500 mt-1">Use Google Slides: File → Share → Publish to web → Embed URL</p>
+              </div>
+            )}
+            {moduleForm.contentType === 'ARTICLE' && (
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">{t('course.articleContent')}</label>
+                <textarea value={moduleForm.contentUrl || ''} onChange={e => setModuleForm(f => ({...f, contentUrl: e.target.value}))}
+                  rows={6} placeholder="Write article content or paste URL..."
+                  className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500 resize-none" />
+              </div>
+            )}
           </div>
         )}
 

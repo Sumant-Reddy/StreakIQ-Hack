@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
+import InviteAccept from './pages/InviteAccept';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import CourseManager from './pages/admin/CourseManager';
 import UserManager from './pages/admin/UserManager';
@@ -15,6 +16,7 @@ import AICompanion from './pages/learner/AICompanion';
 import MockRoleplay from './pages/learner/MockRoleplay';
 import Leaderboard from './pages/learner/Leaderboard';
 import LearningPath from './pages/learner/LearningPath';
+import MyCoursesPage from './pages/learner/MyCoursesPage';
 
 function RoleRoute({ role, children }) {
   const { user, loading } = useAuth();
@@ -38,6 +40,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/invite/:token" element={<InviteAccept />} />
           <Route path="/" element={<HomeRedirect />} />
 
           <Route path="/admin" element={<RoleRoute role={['ADMIN']}><AdminDashboard /></RoleRoute>} />
@@ -56,6 +59,7 @@ export default function App() {
           <Route path="/learn/roleplay" element={<RoleRoute><MockRoleplay /></RoleRoute>} />
           <Route path="/learn/leaderboard" element={<RoleRoute><Leaderboard /></RoleRoute>} />
           <Route path="/learn/path" element={<RoleRoute><LearningPath /></RoleRoute>} />
+          <Route path="/learn/courses" element={<RoleRoute><MyCoursesPage /></RoleRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

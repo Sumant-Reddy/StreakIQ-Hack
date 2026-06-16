@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { courseApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,6 +18,7 @@ const SUGGESTIONS = [
 
 export default function AICompanion() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "Hi! I'm YAMI, your AI learning companion. Ask me anything about your courses — diamond knowledge, selling techniques, customer handling, or any CaratLane training topic." }
   ]);
@@ -68,23 +70,23 @@ export default function AICompanion() {
       });
     } else {
       setTimeout(() => {
-        setMessages(prev => [...prev, { role: 'assistant', content: 'I\'m currently offline. Please ensure the backend is connected.' }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: t('aiCompanion.currentlyOffline') }]);
         setLoading(false);
       }, 1000);
     }
   };
 
   return (
-    <Layout title="AI Learning Companion">
+    <Layout title={t('aiCompanion.aiLearningCompanion')}>
       <div className="max-w-4xl mx-auto h-[calc(100vh-140px)] flex flex-col gap-4">
         {/* Course selector */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-brand-500/10 border border-brand-500/30 rounded-lg px-3 py-2">
             <Brain className="w-4 h-4 text-brand-400" />
-            <span className="text-sm font-medium text-brand-300">YAMI AI Companion</span>
+            <span className="text-sm font-medium text-brand-300">{t('aiCompanion.yamiCompanion')}</span>
           </div>
           <select className="input flex-1 text-sm" value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)}>
-            <option value="">General knowledge (no specific course)</option>
+            <option value="">{t('aiCompanion.generalKnowledge')}</option>
             {courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
         </div>

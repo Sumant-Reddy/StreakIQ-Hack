@@ -108,9 +108,9 @@ Frontend: http://localhost:3000
 
 | Role    | Email                    | Password    |
 |---------|--------------------------|-------------|
-| Admin   | admin@catratlane.com     | admin123    |
-| Manager | manager@catratlane.com   | manager123  |
-| Learner | rahul@catratlane.com     | learner123  |
+| Admin   | admin@caratlane.com     | admin@123    |
+| Manager | manager@caratlane.com   | manager@123  |
+| Learner | rahul@caratlane.com     | learner123  |
 
 ---
 

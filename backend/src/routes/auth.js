@@ -65,4 +65,58 @@ router.put('/me', authenticate, asyncHandler(async (req, res) => {
   res.json(updated);
 }));
 
+router.post('/accept-invite/:token', asyncHandler(async (req, res) => {
+  const { password, name } = req.body;
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  const user = await prisma.user.findFirst({
+    where: {
+      inviteToken: req.params.token,
+      inviteExpiry: { gt: new Date() },
+      status: 'INVITED',
+    },
+  });
+  if (!user) return res.status(400).json({ error: 'Invalid or expired invite link' });
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  // Find mandatory courses to auto-enroll
+  const mandatoryCourses = await prisma.course.findMany({
+    where: { isMandatory: true, isPublished: true },
+    select: { id: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        name: name || user.name,
+        status: 'ACTIVE',
+        inviteToken: null,
+        inviteExpiry: null,
+      },
+    });
+    // Auto-enroll in mandatory courses
+    for (const course of mandatoryCourses) {
+      await tx.enrollment.upsert({
+        where: { userId_courseId: { userId: user.id, courseId: course.id } },
+        create: { userId: user.id, courseId: course.id },
+        update: {},
+      });
+    }
+  });
+
+  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+  const { passwordHash: _, ...safeUser } = await prisma.user.findUnique({ where: { id: user.id } });
+  res.json({ token, user: safeUser });
+}));
+
+router.put('/me/language', authenticate, asyncHandler(async (req, res) => {
+  const { language } = req.body;
+  if (!['EN', 'HI', 'TE', 'TA', 'KN'].includes(language)) return res.status(400).json({ error: 'Invalid language' });
+  await prisma.user.update({ where: { id: req.user.id }, data: { language } });
+  res.json({ language });
+}));
+
 module.exports = router;
