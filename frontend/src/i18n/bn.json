@@ -42,7 +42,8 @@
     "yourName": "আপনার নাম",
     "newPassword": "নতুন পাসওয়ার্ড (ন্যূনতম ৮টি অক্ষর)",
     "activateAccount": "অ্যাকাউন্ট অ্যাক্টিভেট করুন",
-    "activating": "অ্যাক্টিভেট হচ্ছে..."
+    "activating": "অ্যাক্টিভেট হচ্ছে...",
+    "invalidCredentials": "অবৈধ ইমেইল বা পাসওয়ার্ড"
   },
   "dashboard": {
     "myLearningDashboard": "আমার লার্নিং ড্যাশবোর্ড",

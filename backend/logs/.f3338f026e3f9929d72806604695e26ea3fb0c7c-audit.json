@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 30
+    },
+    "auditLog": "/Users/sumanthkumarv/yami-learn/backend/logs/.f3338f026e3f9929d72806604695e26ea3fb0c7c-audit.json",
+    "files": [
+        {
+            "date": 1781652037370,
+            "name": "/Users/sumanthkumarv/yami-learn/backend/logs/yami-error-2026-06-17.log",
+            "hash": "1eb04b3a3d1098c0c5928ff13a9f5ca242bf61c360513a54006f5b582bf68b13"
+        }
+    ],
+    "hashType": "sha256"
+}

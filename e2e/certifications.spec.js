@@ -26,9 +26,7 @@ test.describe('Certifications', () => {
     await page.waitForLoadState('networkidle');
 
     // An empty-state message should be visible when there are no certifications
-    const emptyState = page.locator(
-      '[data-testid="empty-state"], text=/no certifications|no badges|complete.*course|earn.*first/i'
-    ).first();
-    await expect(emptyState).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=No certification tracks available yet').first())
+      .toBeVisible({ timeout: 10000 });
   });
 });

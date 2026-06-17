@@ -109,6 +109,7 @@ model Course {
   title           String
   description     String      @db.Text
   thumbnail       String?
+  thumbnailS3Key  String?
   department      String?
   tags            String?
   estimatedHours  Float       @default(0)
@@ -143,6 +144,7 @@ model Module {
   order       Int
   contentType ContentType
   contentUrl  String
+  s3Key       String?
   duration    Int         @default(0)
   aiSummary   String?     @db.Text
   createdAt   DateTime    @default(now())
@@ -416,17 +418,19 @@ model Flashcard {
 }
 
 model RoleplaySessions {
-  id            Int      @id @default(autoincrement())
-  userId        Int
-  scenario      String
-  transcript    Json
-  productScore  Float?
-  confidenceScore Float?
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  scenario           String
+  transcript         Json
+  productScore       Float?
+  confidenceScore    Float?
   communicationScore Float?
-  upsellScore   Float?
-  overallScore  Float?
-  feedback      String?  @db.Text
-  completedAt   DateTime @default(now())
+  upsellScore        Float?
+  overallScore       Float?
+  feedback           String?  @db.Text
+  strengths          Json?    // Added to store evaluated strengths array
+  improvements       Json?    // Added to store evaluated improvements array
+  completedAt        DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

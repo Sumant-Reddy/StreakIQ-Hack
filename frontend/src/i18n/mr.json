@@ -42,7 +42,8 @@
     "yourName": "तुमचे नाव",
     "newPassword": "नवीन पासवर्ड (किमान ८ अक्षरे)",
     "activateAccount": "अकाउंट सक्रिय करा",
-    "activating": "सक्रिय होत आहे..."
+    "activating": "सक्रिय होत आहे...",
+    "invalidCredentials": "अवैध ईमेल किंवा पासवर्ड"
   },
   "dashboard": {
     "myLearningDashboard": "माझा लर्निंग डॅशबोर्ड",

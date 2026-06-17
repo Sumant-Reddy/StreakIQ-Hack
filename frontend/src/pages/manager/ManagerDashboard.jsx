@@ -5,7 +5,7 @@ import StatCard from '../../components/StatCard';
 import RiskBadge from '../../components/RiskBadge';
 import RetentionGauge from '../../components/RetentionGauge';
 import { managerApi } from '../../services/api';
-import { Users, TrendingUp, AlertTriangle, Award, Brain, BarChart3, ChevronRight, Flame, Map } from 'lucide-react';
+import { Users, TrendingUp, AlertTriangle, Award, Brain, BarChart3, ChevronRight, Flame, Map, MessageSquare } from 'lucide-react';
 
 export default function ManagerDashboard() {
   const [summary, setSummary] = useState(null);
@@ -42,6 +42,16 @@ export default function ManagerDashboard() {
 
         {/* Quick actions */}
         <div className="grid grid-cols-2 gap-3">
+          <Link to="/manager/roleplay" className="flex items-center gap-4 card hover:border-purple-500/40 transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+              <MessageSquare className="w-5 h-5 text-purple-400" />
+            </div>
+            <div className="flex-1">
+              <div className="font-medium text-white group-hover:text-purple-300">Roleplay Sessions</div>
+              <div className="text-xs text-gray-400">Review team roleplay scores</div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-purple-400 transition-colors" />
+          </Link>
           <Link to="/manager/copilot" className="flex items-center gap-4 card hover:border-brand-500/40 transition-all group">
             <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
               <Brain className="w-5 h-5 text-brand-400" />

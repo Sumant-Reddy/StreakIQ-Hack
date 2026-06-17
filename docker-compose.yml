@@ -28,6 +28,8 @@ services:
     image: postgres:16-alpine
     container_name: yami-docmost-db
     restart: unless-stopped
+    ports:
+      - '5433:5432'
     environment:
       POSTGRES_DB: docmost
       POSTGRES_USER: docmost
@@ -42,15 +44,16 @@ services:
     container_name: yami-docmost
     restart: unless-stopped
     ports:
-      - '3002:3000' 
+      - '3002:3000'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      APP_URL: http://localhost:3002 
+      APP_URL: http://localhost:3002
       DATABASE_URL: postgresql://docmost:docmost123@yami-docmost-db:5432/docmost
-      REDIS_URL: redis://yami-redis:6379
+      REDIS_URL: redis://host.docker.internal:6379
       APP_SECRET: changeme-docmost-secret-32chars-min
     depends_on:
       - docmost-db
-      - redis
     volumes:
       - docmost_data:/app/data
     networks:
@@ -76,8 +79,8 @@ services:
       DOCMOST_DB_URL: postgresql://docmost:docmost123@yami-docmost-db:5432/docmost
       DOCMOST_DEFAULT_SPACE_ID: 019ed1aa-e259-7a4e-a982-c792fc7d57e4
       REDIS_URL: redis://yami-redis:6379
-      QDRANT_URL: http://yami-qdrant:6333       
-      DOCMOST_URL: http://yami-docmost:3000     
+      QDRANT_URL: http://yami-qdrant:6333
+      DOCMOST_URL: http://yami-docmost:3000
       FRONTEND_URL: http://localhost:3000     
     depends_on:
       - redis

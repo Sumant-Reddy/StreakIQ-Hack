@@ -42,7 +42,8 @@
     "yourName": "ನಿಮ್ಮ ಹೆಸರು",
     "newPassword": "ಹೊಸ ಪಾಸ್‌ವರ್ಡ್ (ಕನಿಷ್ಠ 8 ಅಕ್ಷರಗಳು)",
     "activateAccount": "ಖಾತೆಯನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ",
-    "activating": "ಸಕ್ರಿಯಗೊಳಿಸಲಾಗುತ್ತಿದೆ..."
+    "activating": "ಸಕ್ರಿಯಗೊಳಿಸಲಾಗುತ್ತಿದೆ...",
+    "invalidCredentials": "ಅಮಾನ್ಯ ಇಮೇಲ್ ಅಥವಾ ಪಾಸ್‌ವರ್ಡ್"
   },
   "dashboard": {
     "myLearningDashboard": "ನನ್ನ ಕಲಿಕೆಯ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",

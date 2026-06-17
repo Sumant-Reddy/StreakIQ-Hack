@@ -3,56 +3,43 @@ const { loginAs } = require('./helpers/auth');
 
 test.describe('Roleplay feature', () => {
   test.beforeEach(async ({ page }) => {
+    // loginAs drives the login form and lands on /learn
     await loginAs(page, 'LEARNER');
   });
 
-  test('roleplay scenario select page loads', async ({ page }) => {
+  test('roleplay page loads with correct title', async ({ page }) => {
     await page.goto('/learn/roleplay');
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('h1, h2')).toContainText('AI Mock Customer Roleplay', { timeout: 10000 });
+    // Layout title="AI Mock Customer Roleplay"
+    await expect(page.locator('h1')).toContainText('AI Mock Customer Roleplay', { timeout: 10000 });
   });
 
-  test('scenario cards are displayed', async ({ page }) => {
+  test('all four scenario cards are displayed', async ({ page }) => {
     await page.goto('/learn/roleplay');
-    await page.waitForLoadState('networkidle');
 
-    // Expect all four scenario cards to be visible
-    const scenarios = ['Anniversary', 'Engagement', 'Upgrade', 'Gifting'];
+    const scenarios = ['Anniversary Gift Seeker', 'First-time Engagement Ring Buyer', 'Solitaire Upgrade Customer', 'Corporate Gifting Client'];
     for (const scenario of scenarios) {
-      await expect(page.locator(`text=${scenario}`).first()).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText(scenario).first()).toBeVisible({ timeout: 8000 });
     }
   });
 
-  test('roleplay shows connecting state on start', async ({ page }) => {
+  test('offline fallback shows pre-built greeting after starting a scenario', async ({ page }) => {
+    // socket.io is already aborted by loginAs, so clicking a scenario activates offline mode
     await page.goto('/learn/roleplay');
-    await page.waitForLoadState('networkidle');
 
-    // Click the Anniversary scenario card to start a session
-    await page.locator('text=Anniversary').first().click();
+    // Click the Anniversary scenario card
+    await page.getByText('Anniversary Gift Seeker').first().click();
 
-    // Immediately after clicking, a connecting/loading indicator should be visible
-    // (not an immediate error — the socket connection attempt should be in progress)
-    const loadingIndicator = page.locator(
-      '[data-testid="connecting"], [aria-label*="connect" i], text=/connecting|loading/i'
-    ).first();
-    await expect(loadingIndicator).toBeVisible({ timeout: 8000 });
+    // After socket fails / offline mode activates, a customer greeting appears
+    // The opening line for anniversary scenario is known from BUILT_IN_RESPONSES
+    await expect(page.getByText("Good morning! I'm looking for a special diamond ring").first())
+      .toBeVisible({ timeout: 10000 });
   });
 
-  test('offline mode fallback shows pre-built response', async ({ page }) => {
-    // Block socket.io connections to simulate offline mode
-    await page.route('**/socket.io/**', (route) => route.abort());
-
+  test('connection status shows Offline badge when socket is aborted', async ({ page }) => {
     await page.goto('/learn/roleplay');
-    await page.waitForLoadState('networkidle');
+    await page.getByText('Anniversary Gift Seeker').first().click();
 
-    // Start the Anniversary scenario
-    await page.locator('text=Anniversary').first().click();
-
-    // After socket fails, the offline/fallback mode should kick in and display
-    // a pre-built customer greeting within a reasonable timeout
-    const greeting = page.locator(
-      '[data-testid="customer-message"], .customer-message, text=/hello|hi|welcome|namaste|good (morning|afternoon|evening)/i'
-    ).first();
-    await expect(greeting).toBeVisible({ timeout: 15000 });
+    // After offline mode kicks in, the status badge shows "Practice Offline"
+    await expect(page.getByText('Practice Offline').first()).toBeVisible({ timeout: 10000 });
   });
 });

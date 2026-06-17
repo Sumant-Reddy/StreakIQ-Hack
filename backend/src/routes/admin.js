@@ -81,6 +81,41 @@ router.post('/sync-docmost', authenticate, requireAdmin, asyncHandler(async (req
   res.json({ message: 'Docmost sync started in background' });
 }));
 
+// Re-embed all documents that have chunkCount = 0 (never indexed or indexed with random vectors)
+router.post('/reindex-documents', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const { force } = req.query;
+  const where = force === 'true' ? {} : { chunkCount: 0 };
+  const docs = await prisma.docmostDocument.findMany({ where });
+  if (!docs.length) return res.json({ message: 'All documents already indexed', reindexed: 0 });
+
+  res.json({ message: `Re-indexing ${docs.length} documents in background`, queued: docs.length });
+
+  // Run in background after response sent
+  (async () => {
+    const { indexDocument, removeDocument } = require('../services/embeddingService');
+    let done = 0;
+    for (const doc of docs) {
+      try {
+        await removeDocument(`docmost_${doc.docmostId}`);
+        const chunkCount = await indexDocument({
+          id: `docmost_${doc.docmostId}`,
+          content: doc.content,
+          metadata: { source: 'docmost', spaceId: doc.spaceId || '', docmostId: doc.docmostId, title: doc.title },
+        });
+        await prisma.docmostDocument.update({
+          where: { id: doc.id },
+          data: { embeddingId: `docmost_${doc.docmostId}`, chunkCount, lastSyncedAt: new Date() },
+        });
+        done++;
+        logger.info(`Re-indexed ${done}/${docs.length}: ${doc.title}`);
+      } catch (err) {
+        logger.error(`Re-index failed for ${doc.docmostId}: ${err.message}`);
+      }
+    }
+    logger.info(`Re-index complete: ${done}/${docs.length} documents`);
+  })();
+}));
+
 router.get('/docmost/status', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const count = await prisma.docmostDocument.count();
   const latest = await prisma.docmostDocument.findFirst({ orderBy: { lastSyncedAt: 'desc' } });

@@ -25,8 +25,8 @@ test.describe('Auth flow', () => {
     await page.fill('input[type="password"]', 'wrongpassword');
     await page.click('button[type="submit"]');
 
-    // Expect an error message to appear
-    await expect(page.locator('body')).toContainText(/invalid|error|incorrect/i);
+    // Expect an error message to appear (Login.jsx renders setError result in red div)
+    await expect(page.locator('body')).toContainText(/invalid email or password|invalid|incorrect/i, { timeout: 8000 });
   });
 
   test('login redirects to dashboard', async ({ page }) => {

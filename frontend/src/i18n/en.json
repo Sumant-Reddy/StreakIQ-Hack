@@ -34,13 +34,14 @@
     "feature3Desc": "Earn badges and climbing up the leaderboard.",
     "subtitle": "Your AI Mentor for Intelligence",
     "heroDesc": "AI-powered knowledge retention, skill tracking, and personalized learning paths for every jewelry consultant.",
-    "quickDemoAccess" : "Quick Access",
+    "quickDemoAccess": "Quick Access",
     "setPassword": "Set Your Password",
     "inviteSubtitle": "Complete your account setup to get started",
     "yourName": "Your Name",
     "newPassword": "New Password (min 8 chars)",
     "activateAccount": "Activate Account",
-    "activating": "Activating..."
+    "activating": "Activating...",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "myLearningDashboard": "My Learning Dashboard",
@@ -82,7 +83,6 @@
     "exploreCourses": "Explore Courses",
     "progress": "Progress",
     "courseContent": "Course Content",
-    
     "modules": "modules",
     "hours": "hours",
     "startLearning": "Start Learning",
@@ -151,8 +151,8 @@
   "learningPath": {
     "myLearningPath": "Learning Path",
     "pathDescription": "Your personalized learning path based on your goals and performance.",
-    "aiPersonalizedPath":"Personalized learning path",
-    "noPathAssigned" : "Path Assigned",
+    "aiPersonalizedPath": "Personalized learning path",
+    "noPathAssigned": "Path Assigned",
     "noPathDescription": "No learning path assigned yet",
     "startLearning": "Start Learning",
     "continueLearning": "Continue Learning",

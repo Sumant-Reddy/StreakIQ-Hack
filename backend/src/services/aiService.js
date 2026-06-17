@@ -55,20 +55,26 @@ const ROLEPLAY_SCRIPTS = {
   ],
 };
 
-async function callLLM(messages, { model, temperature = 0.7, max_tokens = 2000 } = {}) {
+async function callLLM(messages, { model, temperature = 0.7, max_tokens = 2000, disableThinking = false } = {}) {
   // 1. Try Gemini (primary)
   const ai = getGenAI();
   if (ai) {
     try {
+      // gemini-2.5-flash has a thinking budget. For short conversational turns, disable thinking
+      // so thinking tokens don't consume the maxOutputTokens allowance and truncate the reply.
+      const generationConfig = { temperature, maxOutputTokens: max_tokens };
+      if (disableThinking) generationConfig.thinkingConfig = { thinkingBudget: 0 };
       const geminiModel = ai.getGenerativeModel({
-        model: model || 'gemini-1.5-flash',
-        generationConfig: { temperature, maxOutputTokens: max_tokens },
+        model: model || 'gemini-2.5-flash',
+        generationConfig,
       });
       const systemMsg = messages.find(m => m.role === 'system');
       const userMsgs = messages.filter(m => m.role !== 'system');
 
       const chat = geminiModel.startChat({
-        systemInstruction: systemMsg?.content,
+        systemInstruction: systemMsg?.content
+          ? { parts: [{ text: systemMsg.content }] }
+          : undefined,
         history: userMsgs.slice(0, -1).map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: [{ text: m.content }],
@@ -145,24 +151,28 @@ function generateMockResponse(messages) {
 }
 
 async function ragAnswer({ question, context, sources = [], userId, courseTitle = '' }) {
-  const sourceSection = sources.length
-    ? `\nSources used: ${sources.join(', ')}`
-    : '';
+  const hasContext = context && context.trim().length > 50;
 
-  const systemPrompt = `You are YAMI, an AI learning companion for CaratLane jewelry retail training.
-Your answers are grounded ONLY in the provided knowledge base context.
-If the context does not contain enough information to answer the question, say so clearly — do not make up information.
-Be concise, practical, and use examples relevant to jewelry retail when helpful.
+  const systemPrompt = hasContext
+    ? `You are YAMI, an AI learning companion for CaratLane jewelry retail training.
+Your answers are grounded in the provided knowledge base context below.
+Be concise, practical, and use examples relevant to jewelry retail.
+Always respond in the same language as the user's question.`
+    : `You are YAMI, an AI learning companion for CaratLane, India's leading jewelry brand.
+You are an expert in: diamond grading (4Cs — cut, color, clarity, carat), jewelry types (solitaire, halo, eternity), gold and platinum, CaratLane products and services, retail selling techniques, customer handling, upselling, certifications (GIA/IGI/BIS), and jewelry care.
+Answer confidently from your training knowledge. Be practical and specific to jewelry retail context.
 Always respond in the same language as the user's question.`;
 
-  const userPrompt = `${context ? `Context from CaratLane knowledge base:\n${context}\n\n` : ''}Question: ${question}`;
+  const userPrompt = hasContext
+    ? `Context from CaratLane knowledge base:\n${context}\n\nQuestion: ${question}`
+    : `Question: ${question}`;
 
   const answer = await callLLM([
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
-  ], { temperature: 0.5, max_tokens: 1000 });
+  ], { temperature: 0.5, max_tokens: 1000, disableThinking: true });
 
-  return { answer, sources, sourceSection };
+  return { answer, sources, sourceSection: sources.length ? `\nSources: ${sources.join(', ')}` : '' };
 }
 
 async function generateQuiz({ content, contentType, difficulty = 'MEDIUM', count = 10, courseTitle = '' }) {
@@ -294,43 +304,39 @@ Return JSON only.`,
 }
 
 async function generateRoleplayResponse({ scenario, transcript, customerPersona }) {
-  const messages = [
-    {
-      role: 'system',
-      content: `You are playing the role of a ${customerPersona} customer at CaratLane jewelry store.
+  // Format conversation as plain text — avoids Gemini's strict user→model alternation
+  // requirement that breaks when the customer (model role) speaks first.
+  const conversationLines = transcript
+    .map(t => `${t.role === 'customer' ? 'Customer' : 'Consultant'}: ${t.content}`)
+    .join('\n');
+
+  const prompt = `You are roleplaying as a ${customerPersona || 'realistic'} customer at CaratLane, India's leading jewelry brand.
 Scenario: ${scenario}
-Stay in character. Ask realistic jewelry shopping questions. Be slightly challenging but fair.
-Give SHORT responses (1-3 sentences max). React naturally to the consultant's answers.`,
-    },
-    ...transcript.map(t => ({ role: t.role === 'customer' ? 'assistant' : 'user', content: t.content })),
-  ];
 
-  // Try all LLM providers via callLLM; intercept the mock fallback path ourselves
-  // so we can return a scenario-aware scripted line instead of a generic sentence.
-  const ai = getGenAI();
-  const openai = getOpenAI();
-  const anthropic = getAnthropic();
+Rules:
+- Stay fully in character as the customer
+- Ask realistic jewelry shopping questions (pricing, quality, certifications, customization)
+- Be slightly challenging but fair — push back occasionally on price, ask for justification
+- Give SHORT responses (1-3 sentences only)
+- React naturally and directly to what the consultant just said
 
-  if (ai || openai || anthropic) {
-    try {
-      return await callLLM(messages, { temperature: 0.8, max_tokens: 200 });
-    } catch (_) {
-      // all providers failed — fall through to script fallback
-    }
+${conversationLines ? `Conversation so far:\n${conversationLines}\n` : ''}
+Customer (your next line only, no labels or quotation marks):`;
+
+  try {
+    return await callLLM([
+      { role: 'system', content: 'You are a customer in a jewelry store roleplay. Output only the customer\'s next spoken line. No labels, no quotes, no explanation.' },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 300, disableThinking: true });
+  } catch (_) {
+    // Script fallback when all LLM providers fail
+    const scenarioLower = (scenario || '').toLowerCase();
+    const scriptKey = Object.keys(ROLEPLAY_SCRIPTS).find(k => scenarioLower.includes(k)) || 'anniversary';
+    const lines = ROLEPLAY_SCRIPTS[scriptKey];
+    const customerTurns = transcript.filter(t => t.role === 'customer').length;
+    logger.warn(`All LLM providers failed — using scripted line for "${scriptKey}", turn ${customerTurns}`);
+    return lines[customerTurns % lines.length];
   }
-
-  // Script-based fallback: pick the array that matches the scenario id.
-  // scenario strings typically contain the id as a word, e.g. "anniversary", "engagement", etc.
-  const scenarioLower = (scenario || '').toLowerCase();
-  const scriptKey = Object.keys(ROLEPLAY_SCRIPTS).find(k => scenarioLower.includes(k)) || 'anniversary';
-  const lines = ROLEPLAY_SCRIPTS[scriptKey];
-
-  // Use the number of customer turns already in the transcript as the turn index.
-  const customerTurns = transcript.filter(t => t.role === 'customer').length;
-  const line = lines[customerTurns % lines.length];
-
-  logger.warn(`No AI provider available — returning scripted roleplay line for scenario "${scriptKey}", turn ${customerTurns}`);
-  return line;
 }
 
 module.exports = {

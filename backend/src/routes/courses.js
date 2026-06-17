@@ -4,17 +4,37 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { generateSummary } = require('../services/aiService');
 const { indexDocument } = require('../services/embeddingService');
+const { isS3Configured, getPresignedUrl } = require('../services/s3Service');
+
+// Attach presigned URLs to modules and course thumbnail when S3 keys exist
+async function attachPresignedUrls(course) {
+  if (!isS3Configured()) return course;
+  const [thumbnailPresigned, modulesWithUrls] = await Promise.all([
+    course.thumbnailS3Key ? getPresignedUrl(course.thumbnailS3Key, 3600) : Promise.resolve(null),
+    Promise.all((course.modules || []).map(async (m) => {
+      if (!m.s3Key) return m;
+      const presignedUrl = await getPresignedUrl(m.s3Key, 3600);
+      return { ...m, presignedUrl };
+    })),
+  ]);
+  return {
+    ...course,
+    ...(thumbnailPresigned && { thumbnailPresigned }),
+    modules: modulesWithUrls,
+  };
+}
 
 router.get('/', authenticate, asyncHandler(async (req, res) => {
-  const { department, search, page = 1, limit = 20 } = req.query;
-  const where = { isPublished: true };
+  const { department, search, page = 1, limit = 50 } = req.query;
+  // Admins see all courses (including drafts); learners/managers see only published
+  const where = req.user.role === 'ADMIN' ? {} : { isPublished: true };
   if (department) where.department = department;
   if (search) where.OR = [{ title: { contains: search } }, { description: { contains: search } }];
 
   const [courses, total] = await Promise.all([
     prisma.course.findMany({
       where,
-      include: { modules: { select: { id: true, title: true, order: true, contentType: true, duration: true } } },
+      include: { modules: { select: { id: true, title: true, order: true, contentType: true, contentUrl: true, duration: true } } },
       skip: (page - 1) * limit,
       take: Number(limit),
       orderBy: { createdAt: 'desc' },
@@ -39,18 +59,18 @@ router.get('/:id', authenticate, asyncHandler(async (req, res) => {
     where: { userId_courseId: { userId: req.user.id, courseId: course.id } },
   });
 
-  res.json({ ...course, enrolled: !!enrollment, progress: enrollment?.progressPercent || 0 });
+  const courseWithUrls = await attachPresignedUrls(course);
+  res.json({ ...courseWithUrls, enrolled: !!enrollment, progress: enrollment?.progressPercent || 0 });
 }));
 
 router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { title, description, thumbnail, department, tags, estimatedHours, isPublished, isMandatory, modules = [] } = req.body;
+  const { title, description, thumbnail, thumbnailS3Key, department, tags, estimatedHours, isPublished, isMandatory, modules = [] } = req.body;
   const course = await prisma.course.create({
     data: {
-      title, description, thumbnail: thumbnail || null, department, tags, estimatedHours: parseFloat(estimatedHours) || 0, isPublished: !!isPublished, isMandatory: !!isMandatory,
+      title, description, thumbnail: thumbnail || null, thumbnailS3Key: thumbnailS3Key || null,
+      department, tags, estimatedHours: parseFloat(estimatedHours) || 0, isPublished: !!isPublished, isMandatory: !!isMandatory,
       createdById: req.user.id,
-      modules: {
-        create: modules.map((m, i) => ({ ...m, order: i + 1 })),
-      },
+      modules: { create: modules.map((m, i) => ({ ...m, order: i + 1 })) },
     },
     include: { modules: true },
   });
@@ -58,10 +78,14 @@ router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
 }));
 
 router.put('/:id', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { title, description, thumbnail, department, tags, estimatedHours, isPublished, isMandatory } = req.body;
+  const { title, description, thumbnail, thumbnailS3Key, department, tags, estimatedHours, isPublished, isMandatory } = req.body;
   const course = await prisma.course.update({
     where: { id: Number(req.params.id) },
-    data: { title, description, thumbnail: thumbnail || null, department, tags, estimatedHours, isPublished, isMandatory },
+    data: {
+      title, description, thumbnail: thumbnail || null,
+      ...(thumbnailS3Key !== undefined && { thumbnailS3Key }),
+      department, tags, estimatedHours, isPublished, isMandatory,
+    },
   });
   res.json(course);
 }));
@@ -78,12 +102,12 @@ router.post('/:id/enroll', authenticate, asyncHandler(async (req, res) => {
 
 router.post('/:id/modules', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const courseId = Number(req.params.id);
-  const { title, contentType, contentUrl, duration, description } = req.body;
+  const { title, contentType, contentUrl, s3Key, duration, description } = req.body;
   if (!title || !contentType) return res.status(400).json({ error: 'Title and contentType are required' });
 
   const count = await prisma.module.count({ where: { courseId } });
   const module = await prisma.module.create({
-    data: { courseId, title, contentType, contentUrl: contentUrl || '', duration: duration || 0, description, order: count + 1 },
+    data: { courseId, title, contentType, contentUrl: contentUrl || '', s3Key: s3Key || null, duration: duration || 0, description, order: count + 1 },
   });
 
   // Generate AI summary + index in Qdrant for ALL content types (non-blocking)
@@ -128,6 +152,27 @@ router.post('/:id/modules', authenticate, requireAdmin, asyncHandler(async (req,
   res.status(201).json(module);
 }));
 
+router.put('/:courseId/modules/:moduleId', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  const { title, contentType, contentUrl, s3Key, duration, description } = req.body;
+  const module = await prisma.module.update({
+    where: { id: Number(req.params.moduleId) },
+    data: {
+      ...(title && { title }),
+      ...(contentType && { contentType }),
+      ...(contentUrl !== undefined && { contentUrl }),
+      ...(s3Key !== undefined && { s3Key }),
+      ...(duration !== undefined && { duration: Number(duration) }),
+      ...(description !== undefined && { description }),
+    },
+  });
+  res.json(module);
+}));
+
+router.delete('/:courseId/modules/:moduleId', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+  await prisma.module.delete({ where: { id: Number(req.params.moduleId) } });
+  res.json({ success: true });
+}));
+
 router.get('/:courseId/next-quiz', authenticate, asyncHandler(async (req, res) => {
   const courseId = Number(req.params.courseId);
   const quiz = await prisma.quiz.findFirst({
@@ -165,8 +210,8 @@ router.post('/:courseId/modules/:moduleId/watch', authenticate, asyncHandler(asy
     await enqueueEvent('VIDEO_WATCHED', req.user.id, { completionPercent: watchedSecs / totalSecs });
   }
 
-  // Check badges after progress update
-  if (completedAt || progressPercent >= 100) {
+  // Check badges after video completion
+  if (completed) {
     const { checkAllBadges } = require('../services/gamificationService');
     checkAllBadges(req.user.id).catch(() => {});
   }

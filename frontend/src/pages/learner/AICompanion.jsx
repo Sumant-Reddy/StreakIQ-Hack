@@ -19,7 +19,7 @@ const SUGGESTIONS = [
 export default function AICompanion() {
   const { user } = useAuth();
   const { t } = useTranslation();
-  const socket = useSocket(); // Pull the managed socket client instance
+  const { socket, connected, connecting } = useSocket();
 
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "Hi! I'm YAMI, your AI learning companion. Ask me anything about your courses — diamond knowledge, selling techniques, customer handling, or any CaratLane training topic." }
@@ -67,7 +67,7 @@ export default function AICompanion() {
     setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setLoading(true);
 
-    if (socket?.connected) {
+    if (socket && connected) {
       socket.emit('ai:message', {
         sessionId: sessionId.current,
         message: msg,

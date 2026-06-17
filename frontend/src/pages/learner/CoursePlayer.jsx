@@ -107,8 +107,11 @@ export default function CoursePlayer() {
   const renderContent = (module) => {
     if (!module) return null;
 
+    // Use presigned S3 URL when available (generated fresh by the backend on every GET /courses/:id)
+    const contentUrl = module.presignedUrl || module.contentUrl;
+
     // Extension-based rendering overrides contentType for uploaded local files
-    const fileKind = getFileKind(module.contentUrl);
+    const fileKind = getFileKind(contentUrl);
 
     if (fileKind === 'AUDIO') {
       return (
@@ -123,7 +126,7 @@ export default function CoursePlayer() {
             <div className="text-xs text-gray-500 mb-4">Audio lesson</div>
           </div>
           <audio
-            src={module.contentUrl}
+            src={contentUrl}
             controls
             className="w-full max-w-md"
             onEnded={() => markModuleComplete(module)}
@@ -142,7 +145,7 @@ export default function CoursePlayer() {
       return (
         <div className="bg-gray-900 rounded-xl border border-gray-700 overflow-hidden">
           <img
-            src={module.contentUrl}
+            src={contentUrl}
             alt={module.title}
             className="w-full object-contain max-h-[560px] rounded-xl"
             onError={e => { e.target.style.display = 'none'; }}
@@ -150,7 +153,7 @@ export default function CoursePlayer() {
           <div className="p-4 flex items-center justify-between">
             <div className="text-sm text-gray-400">{module.title}</div>
             <div className="flex gap-2">
-              <a href={module.contentUrl} target="_blank" rel="noreferrer"
+              <a href={contentUrl} target="_blank" rel="noreferrer"
                 className="text-xs text-brand-400 hover:text-brand-300 flex items-center gap-1">
                 <ExternalLink className="w-3.5 h-3.5" /> Open full size
               </a>
@@ -175,10 +178,10 @@ export default function CoursePlayer() {
             <div className="text-xs text-gray-500 mt-0.5">Download to view in Microsoft Word or Google Docs</div>
           </div>
           <div className="flex gap-3">
-            <a href={module.contentUrl} download className="btn-primary text-sm px-5 flex items-center gap-2">
+            <a href={contentUrl} download className="btn-primary text-sm px-5 flex items-center gap-2">
               <ExternalLink className="w-4 h-4" /> Download Document
             </a>
-            <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(module.contentUrl)}`} target="_blank" rel="noreferrer"
+            <a href={`https://docs.google.com/viewer?url=${encodeURIComponent(contentUrl)}`} target="_blank" rel="noreferrer"
               className="btn-secondary text-sm px-4 flex items-center gap-1.5">
               View Online
             </a>
@@ -191,34 +194,34 @@ export default function CoursePlayer() {
     }
 
     if (module.contentType === 'VIDEO') {
-      const isYouTube = module.contentUrl?.includes('youtube') || module.contentUrl?.includes('youtu.be');
-      const isYouTubeEmbed = module.contentUrl?.includes('embed');
+      const isYouTube = contentUrl?.includes('youtube') || contentUrl?.includes('youtu.be');
+      const isYouTubeEmbed = contentUrl?.includes('embed');
 
       if (isYouTube && !isYouTubeEmbed) {
-        const videoId = module.contentUrl?.match(/(?:v=|youtu.be\/)([^&\s]+)/)?.[1];
-        const embedUrl = videoId ? `https://www.youtube.com/embed/${videoId}?enablejsapi=1` : null;
-        if (embedUrl) {
+        const videoId = contentUrl?.match(/(?:v=|youtu.be\/)([^&\s]+)/)?.[1];
+        const ytEmbed = videoId ? `https://www.youtube.com/embed/${videoId}?enablejsapi=1` : null;
+        if (ytEmbed) {
           return (
             <div className="aspect-video bg-black rounded-xl overflow-hidden border border-gray-700">
-              <iframe src={embedUrl} title={module.title} className="w-full h-full" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
+              <iframe src={ytEmbed} title={module.title} className="w-full h-full" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
             </div>
           );
         }
       }
 
-      if (isYouTubeEmbed || module.contentUrl?.includes('vimeo') || module.contentUrl?.includes('embed')) {
+      if (isYouTubeEmbed || contentUrl?.includes('vimeo') || contentUrl?.includes('embed')) {
         return (
           <div className="aspect-video bg-black rounded-xl overflow-hidden border border-gray-700">
-            <iframe src={module.contentUrl} title={module.title} className="w-full h-full" allowFullScreen />
+            <iframe src={contentUrl} title={module.title} className="w-full h-full" allowFullScreen />
           </div>
         );
       }
 
-      // Direct video file
+      // Direct video file (including S3 presigned URL)
       return (
         <div className="aspect-video bg-gray-900 rounded-xl overflow-hidden border border-gray-700">
-          {module.contentUrl ? (
-            <video ref={videoRef} src={module.contentUrl} controls className="w-full h-full" onTimeUpdate={handleVideoProgress} onEnded={() => markModuleComplete(module)}>
+          {contentUrl ? (
+            <video ref={videoRef} src={contentUrl} controls className="w-full h-full" onTimeUpdate={handleVideoProgress} onEnded={() => markModuleComplete(module)}>
               Your browser does not support the video tag.
             </video>
           ) : (
@@ -237,9 +240,9 @@ export default function CoursePlayer() {
     }
 
     if (module.contentType === 'PPT') {
-      const embedUrl = module.contentUrl?.includes('docs.google.com')
-        ? module.contentUrl.replace('/pub?', '/embed?').replace('/edit', '/embed')
-        : module.contentUrl;
+      const embedUrl = contentUrl?.includes('docs.google.com')
+        ? contentUrl.replace('/pub?', '/embed?').replace('/edit', '/embed')
+        : contentUrl;
       return (
         <div className="aspect-video bg-gray-900 rounded-xl overflow-hidden border border-gray-700">
           {embedUrl ? (
@@ -260,7 +263,7 @@ export default function CoursePlayer() {
       return (
         <div className="bg-gray-800 rounded-xl p-6 min-h-48 border border-gray-700">
           <div className="prose prose-invert max-w-none text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
-            {module.contentUrl || t('player.noContent', 'No content available')}
+            {contentUrl || t('player.noContent', 'No content available')}
           </div>
         </div>
       );
@@ -274,8 +277,8 @@ export default function CoursePlayer() {
           <div className="text-white font-medium">{module.title}</div>
           <div className="text-sm text-gray-400 mt-1">{module.contentType} Document</div>
         </div>
-        {module.contentUrl && (
-          <a href={module.contentUrl} target="_blank" rel="noreferrer"
+        {contentUrl && (
+          <a href={contentUrl} target="_blank" rel="noreferrer"
             className="btn-primary text-sm px-6 flex items-center gap-2">
             <ExternalLink className="w-4 h-4" /> {t('course.openDocument', 'Open Document')}
           </a>

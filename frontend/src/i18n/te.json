@@ -42,7 +42,8 @@
     "yourName": "మీ పేరు",
     "newPassword": "కొత్త పాస్‌వర్డ్ (కనీసం 8 అక్షరాలు)",
     "activateAccount": "ఖాతాను సక్రియం చేయండి",
-    "activating": "సక్రియం అవుతోంది..."
+    "activating": "సక్రియం అవుతోంది...",
+    "invalidCredentials": "చెల్లని ఇమెయిల్ లేదా పాస్‌వర్డ్"
   },
   "dashboard": {
     "myLearningDashboard": "నా లెర్నింగ్ డ్యాష్‌బోర్డ్",

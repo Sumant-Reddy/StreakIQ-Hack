@@ -20,17 +20,9 @@ export default defineConfig({
       clientPort: 443,
     },
     proxy: {
-      // Standard REST API Proxy routing
-      '/api': {
-        target: 'http://localhost:5000', // 👈 Change localhost to yami-backend
-        changeOrigin: true,
-      },
-      // Real-time Learner Socket.io Routing
-      '/socket.io': {
-        target: 'http://localhost:5000', // 👈 Change localhost to yami-backend
-        ws: true, // Keep this active
-        changeOrigin: true,
-      },
+      '/api': { target: 'http://localhost:5000', changeOrigin: true },
+      '/uploads': { target: 'http://localhost:5000', changeOrigin: true },
+      '/socket.io': { target: 'http://localhost:5000', ws: true, changeOrigin: true },
     },
   },
 });

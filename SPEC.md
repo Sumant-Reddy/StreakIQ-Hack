@@ -358,6 +358,20 @@ cd backend && node prisma/seed.js
 # Start dev servers
 cd backend && npm run dev
 cd frontend && npm run dev
+
+# Run E2E tests (requires dev servers running on :3000 and :5173)
+cd e2e && npm install && npx playwright install
+npx playwright test           # all specs headless
+npx playwright test --ui      # interactive mode
+```
+
+### Environment variables (local dev additions)
+```env
+# Redis — falls back to localhost:6379 when REDIS_URL is not set
+REDIS_URL=redis://localhost:6379   # override only if using custom port
+
+# Gemini — required for AI features (RAG, roleplay scoring, embeddings)
+GEMINI_API_KEY=AIzaSy...           # must start with AIzaSy
 ```
 
 ---

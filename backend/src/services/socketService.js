@@ -3,6 +3,30 @@ const { generateRoleplayResponse, answerQuestion, ragAnswer } = require('./aiSer
 const prisma = require('../config/database');
 const logger = require('../utils/logger');
 
+const SKILL_KEYWORDS = {
+  'Diamond Knowledge': /\b(4c|four c|cut|carat|clarity|colou?r|diamond|grading|brilliant|facet|inclusion|fluorescence)\b/i,
+  'Upselling': /\b(upsell|upgrade|higher|premium|better quality|recommend|bundle)\b/i,
+  'Customer Handling': /\b(customer|complaint|objection|price|budget|negotiat|concern|refund|return|difficult|angry)\b/i,
+  'Metal Knowledge': /\b(gold|platinum|silver|metal|karat|rhodium|white gold|yellow gold|rose gold)\b/i,
+  'Product Knowledge': /\b(solitaire|halo|eternity|pendant|bracelet|necklace|ring|earring|bangle|mangalsutra|chain)\b/i,
+  'Certification Knowledge': /\b(gia|igi|bis|hallmark|certif|authentic|lab.grown|lab report)\b/i,
+  'Jewelry Care': /\b(care|maintain|clean|polish|store|scratch|tarnish|repair|warranty|service)\b/i,
+};
+
+async function updateSkillScores(userId, text) {
+  const detected = Object.entries(SKILL_KEYWORDS)
+    .filter(([, re]) => re.test(text))
+    .map(([skill]) => skill);
+  if (!detected.length) return;
+  await Promise.all(detected.map(skill =>
+    prisma.skillScore.upsert({
+      where: { userId_skill: { userId, skill } },
+      create: { userId, skill, score: 1 },
+      update: { score: { increment: 1 } },
+    }).catch(() => {})
+  ));
+}
+
 function setupSocketHandlers(io) {
   // 1. Socket Authentication Middleware (Triggers when frontend client connects)
   io.use((socket, next) => {
@@ -63,6 +87,7 @@ function setupSocketHandlers(io) {
 
         const { checkAllBadges } = require('../services/gamificationService');
         checkAllBadges(socket.userId).catch(() => {});
+        updateSkillScores(socket.userId, message + ' ' + (sources || []).join(' ')).catch(() => {});
 
         socket.emit('ai:response', { sessionId, message: answer, sources, timestamp: new Date() });
       } catch (err) {
@@ -180,6 +205,21 @@ function setupSocketHandlers(io) {
           ...scores,
         },
       });
+
+      // Update skill scores from roleplay performance
+      const roleplaySkillMap = [
+        { skill: 'Product Knowledge', value: scores.productScore },
+        { skill: 'Customer Handling', value: scores.communicationScore },
+        { skill: 'Upselling', value: scores.upsellScore },
+      ];
+      await Promise.all(roleplaySkillMap.map(({ skill, value }) => {
+        if (value == null) return Promise.resolve();
+        return prisma.skillScore.upsert({
+          where: { userId_skill: { userId: socket.userId, skill } },
+          create: { userId: socket.userId, skill, score: Number(value) },
+          update: { score: Number(value) },
+        }).catch(() => {});
+      }));
 
       const { checkAllBadges } = require('../services/gamificationService');
       checkAllBadges(socket.userId).catch(() => {});

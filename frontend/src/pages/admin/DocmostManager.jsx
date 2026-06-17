@@ -4,7 +4,7 @@ import Layout from '../../components/Layout';
 import { adminApi } from '../../services/api';
 import {
   FileText, Plus, Edit2, Trash2, RefreshCw, Search, X,
-  ChevronDown, ChevronUp, Clock, Database, ExternalLink, BookOpen
+  ChevronDown, ChevronUp, Clock, Database, ExternalLink, BookOpen, Zap
 } from 'lucide-react';
 
 const EMPTY_FORM = { title: '', content: '', spaceId: '' };
@@ -15,6 +15,7 @@ export default function DocmostManager() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editDoc, setEditDoc] = useState(null); // null = create mode
@@ -104,6 +105,16 @@ export default function DocmostManager() {
     }
   };
 
+  const handleReindex = async () => {
+    setReindexing(true);
+    try {
+      await adminApi.reindexDocuments(true);
+      setTimeout(() => { setReindexing(false); load(); }, 8000);
+    } catch {
+      setReindexing(false);
+    }
+  };
+
   const filtered = docs.filter(d =>
     d.title.toLowerCase().includes(search.toLowerCase())
   );
@@ -124,6 +135,12 @@ export default function DocmostManager() {
                 placeholder="Search documents..."
                 className="bg-gray-800 border border-gray-700 text-white pl-9 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:border-brand-500 w-48" />
             </div>
+            <button onClick={handleReindex} disabled={reindexing}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition-all disabled:opacity-50"
+              title="Re-embed all documents using gemini-embedding-001">
+              <Zap className={`w-4 h-4 ${reindexing ? 'animate-pulse text-yellow-400' : ''}`} />
+              {reindexing ? 'Re-indexing...' : 'Re-index RAG'}
+            </button>
             <button onClick={handleSync} disabled={syncing}
               className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-sm text-gray-300 transition-all disabled:opacity-50">
               <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin text-brand-400' : ''}`} />

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SocketProvider } from './contexts/SocketContext';
 import Login from './pages/Login';
 import InviteAccept from './pages/InviteAccept';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -9,6 +10,7 @@ import ManagerDashboard from './pages/manager/ManagerDashboard';
 import TeamAudit from './pages/manager/TeamAudit';
 import AICopilot from './pages/manager/AICopilot';
 import CertificationReadiness from './pages/manager/CertificationReadiness';
+import TeamRoleplay from './pages/manager/TeamRoleplay';
 import LearnerDashboard from './pages/learner/LearnerDashboard';
 import CoursePlayer from './pages/learner/CoursePlayer';
 import QuizPage from './pages/learner/QuizPage';
@@ -42,6 +44,7 @@ function HomeRedirect() {
 export default function App() {
   return (
     <AuthProvider>
+      <SocketProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -57,6 +60,7 @@ export default function App() {
           <Route path="/manager/team/:userId" element={<RoleRoute role={['ADMIN','MANAGER']}><TeamAudit /></RoleRoute>} />
           <Route path="/manager/copilot" element={<RoleRoute role={['ADMIN','MANAGER']}><AICopilot /></RoleRoute>} />
           <Route path="/manager/certification" element={<RoleRoute role={['ADMIN','MANAGER']}><CertificationReadiness /></RoleRoute>} />
+          <Route path="/manager/roleplay" element={<RoleRoute role={['ADMIN','MANAGER']}><TeamRoleplay /></RoleRoute>} />
           <Route path="/admin/certifications" element={<RoleRoute role={['ADMIN','MANAGER']}><CertificationBuilder /></RoleRoute>} />
           <Route path="/manage/docs" element={<RoleRoute><DocmostManager /></RoleRoute>} />
 
@@ -73,6 +77,7 @@ export default function App() {
           <Route path="/learn/badges" element={<RoleRoute><Badges /></RoleRoute>} />
         </Routes>
       </BrowserRouter>
+      </SocketProvider>
     </AuthProvider>
   );
 }

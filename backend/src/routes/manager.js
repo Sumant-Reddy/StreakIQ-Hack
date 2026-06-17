@@ -102,6 +102,64 @@ router.get('/skill-heatmap', authenticate, requireManager, asyncHandler(async (r
   res.json(heatmap);
 }));
 
+router.get('/team/roleplay', authenticate, requireManager, asyncHandler(async (req, res) => {
+  const teamIds = (await prisma.user.findMany({
+    where: { managerId: req.user.id },
+    select: { id: true },
+  })).map(u => u.id);
+
+  const sessions = await prisma.roleplaySessions.findMany({
+    where: { userId: { in: teamIds } },
+    orderBy: { completedAt: 'desc' },
+    take: 200,
+    include: {
+      user: { select: { id: true, name: true, department: true, designation: true } },
+    },
+  });
+  res.json(sessions);
+}));
+
+router.get('/team/roleplay/summary', authenticate, requireManager, asyncHandler(async (req, res) => {
+  const teamIds = (await prisma.user.findMany({
+    where: { managerId: req.user.id },
+    select: { id: true },
+  })).map(u => u.id);
+
+  const sessions = await prisma.roleplaySessions.findMany({
+    where: { userId: { in: teamIds } },
+    select: {
+      userId: true, scenario: true, overallScore: true,
+      productScore: true, communicationScore: true, upsellScore: true, confidenceScore: true,
+      completedAt: true,
+      user: { select: { name: true, department: true } },
+    },
+  });
+
+  const total = sessions.length;
+  if (!total) return res.json({ total: 0, avgOverall: 0, avgProduct: 0, avgComm: 0, avgUpsell: 0, topPerformer: null, scenarioCounts: {} });
+
+  const avg = (field) => sessions.reduce((s, r) => s + (r[field] || 0), 0) / total;
+  const scenarioCounts = sessions.reduce((acc, s) => { acc[s.scenario] = (acc[s.scenario] || 0) + 1; return acc; }, {});
+
+  const byUser = {};
+  sessions.forEach(s => {
+    if (!byUser[s.userId]) byUser[s.userId] = { name: s.user.name, total: 0, scoreSum: 0 };
+    byUser[s.userId].total++;
+    byUser[s.userId].scoreSum += s.overallScore || 0;
+  });
+  const topPerformer = Object.values(byUser).sort((a, b) => (b.scoreSum / b.total) - (a.scoreSum / a.total))[0];
+
+  res.json({
+    total,
+    avgOverall: Math.round(avg('overallScore')),
+    avgProduct: Math.round(avg('productScore')),
+    avgComm: Math.round(avg('communicationScore')),
+    avgUpsell: Math.round(avg('upsellScore')),
+    topPerformer: topPerformer ? { name: topPerformer.name, avgScore: Math.round(topPerformer.scoreSum / topPerformer.total) } : null,
+    scenarioCounts,
+  });
+}));
+
 router.get('/certification-readiness', authenticate, requireManager, asyncHandler(async (req, res) => {
   const team = await prisma.user.findMany({
     where: { managerId: req.user.id },
