@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
-import { courseApi } from '../../services/api';
+import { courseApi, aiApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Brain, Send, BookOpen, Sparkles, User, MessageSquare, FileText } from 'lucide-react';
 import { useSocket } from '../../contexts/SocketContext';
@@ -60,7 +60,7 @@ export default function AICompanion() {
     };
   }, [socket]);
 
-  const sendMessage = (text = input) => {
+  const sendMessage = async (text = input) => {
     if (!text.trim() || loading) return;
     const msg = text.trim();
     setInput('');
@@ -75,10 +75,18 @@ export default function AICompanion() {
         courseTitle: courses.find(c => c.id === Number(selectedCourse))?.title || '',
       });
     } else {
-      setTimeout(() => {
-        setMessages(prev => [...prev, { role: 'assistant', content: t('aiCompanion.currentlyOffline') }]);
+      // HTTP fallback — works even when WebSocket is not available
+      try {
+        const result = await aiApi.ask({
+          question: msg,
+          courseId: selectedCourse ? Number(selectedCourse) : undefined,
+        });
+        setMessages(prev => [...prev, { role: 'assistant', content: result.answer, sources: result.sources || [] }]);
+      } catch (err) {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }]);
+      } finally {
         setLoading(false);
-      }, 1000);
+      }
     }
   };
 

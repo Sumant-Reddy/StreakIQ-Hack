@@ -26,7 +26,9 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    // Reflect the actual request origin so the app works behind Vite proxy, ngrok, etc.
+    // Real auth is enforced via JWT in the socket middleware — CORS is not the security layer here.
+    origin: (origin, callback) => callback(null, true),
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -82,8 +84,4 @@ server.listen(PORT, () => {
   const { seedBadges } = require('./services/gamificationService');
   seedBadges().then(() => logger.info('Badges seeded')).catch(e => logger.warn('Badge seed failed:', e.message));
 });
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-}));
 module.exports = { app, server };

@@ -10,7 +10,7 @@ RUN npm ci
 
 COPY . .
 
-# Generate Prisma Client binary inside the container environment
+# Generate Prisma Client binary inside the container environments
 RUN npx prisma generate
 
 EXPOSE 5000

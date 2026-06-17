@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const prisma = require('../config/database');
 const { authenticate, requireAdmin, requireManager } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -10,8 +11,40 @@ const { generateRecommendations } = require('../services/recommendationService')
 
 const quizUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// Per-user rate limiters — keyed by authenticated user ID so rate limits don't bleed across users
+const makeUserRateLimit = ({ windowMs, max, message }) => rateLimit({
+  windowMs,
+  max,
+  message: { error: message },
+  keyGenerator: (req) => `user_${req.user?.id || req.ip}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.user?.role === 'ADMIN', // admins bypass rate limits
+});
+
+// Heavy AI generation: quiz, summary — 20 per hour per user
+const heavyAiLimit = makeUserRateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: 'AI generation limit reached (20/hour). Please wait before generating more content.',
+});
+
+// Conversational AI: ask, copilot — 60 per hour per user
+const conversationalLimit = makeUserRateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 60,
+  message: 'AI conversation limit reached (60/hour). Please wait a moment.',
+});
+
+// Flashcard generation — 30 per hour per user
+const flashcardLimit = makeUserRateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: 'Flashcard generation limit reached (30/hour). Please wait before generating more.',
+});
+
 // Generate quiz from content (text body)
-router.post('/generate-quiz', authenticate, requireAdmin, asyncHandler(async (req, res) => {
+router.post('/generate-quiz', authenticate, requireAdmin, heavyAiLimit, asyncHandler(async (req, res) => {
   const { content, contentType = 'PDF', difficulty = 'MEDIUM', count = 10, courseTitle = '', courseId } = req.body;
   if (!content) return res.status(400).json({ error: 'Content is required' });
 
@@ -37,7 +70,7 @@ router.post('/generate-quiz', authenticate, requireAdmin, asyncHandler(async (re
 }));
 
 // Generate quiz from uploaded file (PDF, DOCX, TXT)
-router.post('/generate-quiz-from-upload', authenticate, requireAdmin,
+router.post('/generate-quiz-from-upload', authenticate, requireAdmin, heavyAiLimit,
   quizUpload.single('file'),
   asyncHandler(async (req, res) => {
     const { courseId, courseTitle = '', difficulty = 'MIXED', count = 10, contentType = 'PDF' } = req.body;
@@ -82,7 +115,7 @@ router.post('/generate-quiz-from-upload', authenticate, requireAdmin,
 );
 
 // Generate course summary
-router.post('/generate-summary', authenticate, asyncHandler(async (req, res) => {
+router.post('/generate-summary', authenticate, heavyAiLimit, asyncHandler(async (req, res) => {
   const { content, contentType = 'VIDEO', courseTitle = '' } = req.body;
   if (!content) return res.status(400).json({ error: 'Content is required' });
   const summary = await generateSummary({ content, contentType, courseTitle });
@@ -90,7 +123,7 @@ router.post('/generate-summary', authenticate, asyncHandler(async (req, res) => 
 }));
 
 // Generate flashcards
-router.post('/generate-flashcards', authenticate, asyncHandler(async (req, res) => {
+router.post('/generate-flashcards', authenticate, flashcardLimit, asyncHandler(async (req, res) => {
   const { content, moduleTitle = '', count = 10, moduleId } = req.body;
   if (!content) return res.status(400).json({ error: 'Content is required' });
 
@@ -107,7 +140,7 @@ router.post('/generate-flashcards', authenticate, asyncHandler(async (req, res) 
 }));
 
 // AI Manager Copilot
-router.post('/copilot/query', authenticate, requireManager, asyncHandler(async (req, res) => {
+router.post('/copilot/query', authenticate, requireManager, conversationalLimit, asyncHandler(async (req, res) => {
   const { query } = req.body;
   if (!query) return res.status(400).json({ error: 'Query is required' });
 
@@ -201,7 +234,7 @@ router.get('/flashcards/:moduleId', authenticate, asyncHandler(async (req, res) 
 }));
 
 // RAG Q&A endpoint for JC learners
-router.post('/ask', authenticate, asyncHandler(async (req, res) => {
+router.post('/ask', authenticate, conversationalLimit, asyncHandler(async (req, res) => {
   const { question, courseId } = req.body;
   if (!question?.trim()) return res.status(400).json({ error: 'Question is required' });
 

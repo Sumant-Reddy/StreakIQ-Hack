@@ -10,9 +10,10 @@ import {
 
 const DEPARTMENTS = ['Retail', 'Operations', 'Management', 'Training'];
 const CONTENT_TYPES = ['VIDEO', 'PDF', 'SOP', 'PPT', 'ARTICLE', 'EMBED'];
-
 const MODULE_ICON = { VIDEO: Video, PDF: FileText, SOP: FileText, PPT: File, ARTICLE: Globe, EMBED: Globe };
 const EMBED_TYPES = new Set(['EMBED']);
+const DIFFICULTY_OPTIONS = ['MIXED', 'EASY', 'MEDIUM', 'HARD'];
+const DIFF_BADGE = { EASY: 'bg-emerald-500/20 text-emerald-400', MEDIUM: 'bg-yellow-500/20 text-yellow-400', HARD: 'bg-red-500/20 text-red-400' };
 
 function emptyForm() {
   return {
@@ -25,6 +26,438 @@ function emptyForm() {
 function emptyModuleForm() {
   return { title: '', contentType: 'VIDEO', contentUrl: '', s3Key: '', duration: 0, description: '', thumbnail: '', thumbnailS3Key: '' };
 }
+
+// ── Module-level sub-components (MUST be outside the parent to prevent remount on each render) ──
+
+function FileUploadField({ label, value, onChange, accept, type = 'file', courseId = null, uploadFileFn, uploadingFile, uploadingThumb, setUploadingFile, setUploadingThumb }) {
+  return (
+    <div>
+      <label className="text-xs text-gray-400 block mb-1">{label}</label>
+      <div className="flex gap-2">
+        <input className="input flex-1 text-sm" value={value || ''} onChange={e => onChange(e.target.value, null)}
+          placeholder="Paste URL or upload →" />
+        <label className={`btn-secondary text-xs flex items-center gap-1.5 cursor-pointer ${uploadingFile || uploadingThumb ? 'opacity-50' : ''}`}>
+          <Upload className="w-3.5 h-3.5" />
+          Upload
+          <input type="file" accept={accept} className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              type === 'thumbnail' ? setUploadingThumb(true) : setUploadingFile(true);
+              try {
+                const { url, s3Key } = await uploadFileFn(file, type, courseId);
+                onChange(url, s3Key);
+              } catch { alert('Upload failed'); }
+              finally { type === 'thumbnail' ? setUploadingThumb(false) : setUploadingFile(false); }
+            }} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function CourseForm({ form, setForm, isEdit, editingCourse, uploadFileFn, uploadingFile, uploadingThumb, setUploadingFile, setUploadingThumb }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Title *</label>
+          <input className="input w-full" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Diamond Fundamentals" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Department</label>
+          <select className="input w-full" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
+            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div className="lg:col-span-2">
+          <label className="text-xs text-gray-400 block mb-1">Description</label>
+          <textarea className="input w-full h-20 resize-none" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Course description..." />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Tags (comma-separated)</label>
+          <input className="input w-full" value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="diamond,4c,fundamentals" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Estimated Hours</label>
+          <input className="input w-full" type="number" min="0.5" step="0.5" value={form.estimatedHours} onChange={e => setForm(f => ({ ...f, estimatedHours: parseFloat(e.target.value) }))} />
+        </div>
+        <div className="lg:col-span-2">
+          <FileUploadField label="Thumbnail"
+            value={form.thumbnail} accept="image/*" type="thumbnail"
+            courseId={isEdit ? editingCourse?.id : null}
+            uploadFileFn={uploadFileFn}
+            uploadingFile={uploadingFile} uploadingThumb={uploadingThumb}
+            setUploadingFile={setUploadingFile} setUploadingThumb={setUploadingThumb}
+            onChange={(url, s3Key) => setForm(f => ({ ...f, thumbnail: url, ...(s3Key && { thumbnailS3Key: s3Key }) }))} />
+          {form.thumbnail && <img src={form.thumbnail} alt="" className="mt-2 h-16 rounded-lg object-cover border border-gray-700" />}
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Title (Hindi)</label>
+          <input className="input w-full" value={form.titleHi || ''} onChange={e => setForm(f => ({ ...f, titleHi: e.target.value }))} placeholder="हिंदी में शीर्षक" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Title (Telugu)</label>
+          <input className="input w-full" value={form.titleTe || ''} onChange={e => setForm(f => ({ ...f, titleTe: e.target.value }))} placeholder="తెలుగులో శీర్షిక" />
+        </div>
+      </div>
+      <div className="flex items-center gap-4 flex-wrap">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" className="rounded" checked={form.isPublished} onChange={e => setForm(f => ({ ...f, isPublished: e.target.checked }))} />
+          <span className="text-sm text-gray-300">{form.isPublished ? 'Published' : 'Draft — not visible to learners'}</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" className="rounded" checked={form.isMandatory || false} onChange={e => setForm(f => ({ ...f, isMandatory: e.target.checked }))} />
+          <span className="text-sm text-gray-300">Mandatory — auto-enroll new JCs</span>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function AddModulePanel({ moduleForm, setModuleForm, addingModule, handleAddModule, onCancel, editingCourse, uploadFileFn, uploadingFile, uploadingThumb, setUploadingFile, setUploadingThumb }) {
+  return (
+    <div className="mt-4 p-4 bg-gray-800/60 border border-gray-700 rounded-xl space-y-3">
+      <h4 className="text-sm font-semibold text-white">Add Module</h4>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Title *</label>
+          <input className="input w-full text-sm" value={moduleForm.title} onChange={e => setModuleForm(f => ({ ...f, title: e.target.value }))} placeholder="Module title" />
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Content Type</label>
+          <select className="input w-full text-sm" value={moduleForm.contentType} onChange={e => setModuleForm(f => ({ ...f, contentType: e.target.value, contentUrl: '', s3Key: '' }))}>
+            {CONTENT_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
+          </select>
+        </div>
+        {moduleForm.contentType !== 'EMBED' && (
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Duration (seconds)</label>
+            <input className="input w-full text-sm" type="number" min="0" value={moduleForm.duration} onChange={e => setModuleForm(f => ({ ...f, duration: parseInt(e.target.value) || 0 }))} placeholder="600" />
+          </div>
+        )}
+        <div className={moduleForm.contentType === 'EMBED' ? 'col-span-2' : 'col-span-2'}>
+          {moduleForm.contentType === 'ARTICLE' ? (
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Article Content</label>
+              <textarea className="input w-full h-24 resize-none text-sm" value={moduleForm.contentUrl} onChange={e => setModuleForm(f => ({ ...f, contentUrl: e.target.value }))} placeholder="Write article or paste URL..." />
+            </div>
+          ) : moduleForm.contentType === 'EMBED' ? (
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Embed Code or URL</label>
+              <textarea
+                className="input w-full h-28 resize-none text-sm font-mono"
+                value={moduleForm.contentUrl}
+                onChange={e => setModuleForm(f => ({ ...f, contentUrl: e.target.value, s3Key: '' }))}
+                placeholder={`Paste full iframe embed code:\n<iframe src="https://scribehow.com/embed/..." width="100%" allow="fullscreen" ...></iframe>\n\nOr just the embed URL:\nhttps://scribehow.com/embed/...`}
+              />
+              <p className="text-xs text-gray-500 mt-1">Supports Scribehow, Loom, Google Slides, YouTube, and any embeddable content</p>
+            </div>
+          ) : (
+            <FileUploadField label={moduleForm.contentType === 'VIDEO' ? 'Video / Audio' : 'Document / File'}
+              value={moduleForm.contentUrl}
+              accept={moduleForm.contentType === 'VIDEO' ? 'video/*,audio/*' : moduleForm.contentType === 'PPT' ? '.ppt,.pptx' : '.pdf,.doc,.docx,.jpg,.png'}
+              type="file"
+              courseId={editingCourse?.id}
+              uploadFileFn={uploadFileFn}
+              uploadingFile={uploadingFile} uploadingThumb={uploadingThumb}
+              setUploadingFile={setUploadingFile} setUploadingThumb={setUploadingThumb}
+              onChange={(url, s3Key) => setModuleForm(f => ({ ...f, contentUrl: url, ...(s3Key && { s3Key }) }))} />
+          )}
+        </div>
+        {/* Module thumbnail */}
+        <div className="col-span-2">
+          <FileUploadField
+            label="Module Thumbnail (optional)"
+            value={moduleForm.thumbnail}
+            accept="image/*"
+            type="thumbnail"
+            courseId={editingCourse?.id}
+            uploadFileFn={uploadFileFn}
+            uploadingFile={uploadingFile} uploadingThumb={uploadingThumb}
+            setUploadingFile={setUploadingFile} setUploadingThumb={setUploadingThumb}
+            onChange={(url, s3Key) => setModuleForm(f => ({ ...f, thumbnail: url, ...(s3Key && { thumbnailS3Key: s3Key }) }))}
+          />
+          {moduleForm.thumbnail && (
+            <img src={moduleForm.thumbnail} alt="thumbnail preview" className="mt-2 h-16 rounded-lg object-cover border border-gray-700" />
+          )}
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={onCancel} className="btn-secondary text-xs py-1.5">Cancel</button>
+        <button onClick={handleAddModule} disabled={addingModule || !moduleForm.title.trim()} className="btn-primary text-xs py-1.5 flex items-center gap-1.5">
+          {addingModule ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+          Add Module
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ModuleQuizPanel({ mod, moduleQuizForm, setModuleQuizForm, moduleQuizFile, setModuleQuizFile, moduleQuizLoading, onGenerate, moduleQuizResult, moduleQuizFileRef }) {
+  const canGenerate = (moduleQuizForm.prompt.trim() || moduleQuizFile) && !moduleQuizLoading;
+  return (
+    <div className="p-3 border-t border-gray-700 bg-gray-900/50 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-brand-400 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5" /> AI Quiz Generator — {mod.title}
+        </p>
+        <span className="text-xs text-gray-500">Generates 10 questions stored in course</span>
+      </div>
+
+      {/* File upload */}
+      <div>
+        <label className="text-xs text-gray-400 block mb-1">Upload Document (PDF / DOCX)</label>
+        <div className="flex gap-2 items-center">
+          <label className="btn-secondary text-xs py-1.5 flex items-center gap-1.5 cursor-pointer flex-1 justify-center">
+            <Upload className="w-3.5 h-3.5" />
+            {moduleQuizFile ? moduleQuizFile.name : 'Choose file'}
+            <input ref={moduleQuizFileRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden"
+              onChange={e => setModuleQuizFile(e.target.files?.[0] || null)} />
+          </label>
+          {moduleQuizFile && (
+            <button onClick={() => { setModuleQuizFile(null); if (moduleQuizFileRef.current) moduleQuizFileRef.current.value = ''; }}
+              className="text-gray-500 hover:text-red-400 p-1"><X className="w-3.5 h-3.5" /></button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <div className="flex-1 h-px bg-gray-700" />
+        <span>or describe topics</span>
+        <div className="flex-1 h-px bg-gray-700" />
+      </div>
+
+      <div>
+        <label className="text-xs text-gray-400 block mb-1">Paste content or describe topics</label>
+        <textarea className="input w-full h-16 resize-none text-sm"
+          value={moduleQuizForm.prompt}
+          onChange={e => setModuleQuizForm(f => ({ ...f, prompt: e.target.value }))}
+          placeholder={`e.g. "Diamond 4C grades, IGI certification, solitaire settings, pricing for ${mod.title}"`} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Difficulty</label>
+          <select className="input w-full text-sm" value={moduleQuizForm.difficulty}
+            onChange={e => setModuleQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
+            {DIFFICULTY_OPTIONS.map(d => (
+              <option key={d} value={d}>{d === 'MIXED' ? 'Mixed (3E + 4M + 3H)' : d}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Questions</label>
+          <input className="input w-full text-sm" type="number" min="3" max="20"
+            value={moduleQuizForm.count}
+            onChange={e => setModuleQuizForm(f => ({ ...f, count: parseInt(e.target.value) || 10 }))} />
+        </div>
+      </div>
+
+      <button onClick={() => onGenerate(mod)}
+        disabled={!canGenerate}
+        className="btn-primary text-xs py-1.5 w-full flex items-center justify-center gap-1.5 disabled:opacity-50">
+        {moduleQuizLoading
+          ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Generating questions...</>
+          : <><Sparkles className="w-3.5 h-3.5" /> Generate {moduleQuizForm.count} Questions &amp; Save to Course</>}
+      </button>
+
+      {moduleQuizResult && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+            <CheckCircle className="w-3.5 h-3.5" />
+            {moduleQuizResult.questions?.length || 0} questions generated
+            {moduleQuizResult.quiz ? ` and saved (Quiz #${moduleQuizResult.quiz.id})` : ''}
+          </div>
+          {moduleQuizResult.quiz && (
+            <div className="bg-gray-800/40 rounded-lg p-2 text-xs text-gray-400 flex gap-3">
+              {Object.entries(
+                (moduleQuizResult.questions || []).reduce((acc, q) => { acc[q.difficulty] = (acc[q.difficulty] || 0) + 1; return acc; }, {})
+              ).map(([diff, cnt]) => (
+                <span key={diff} className={`px-1.5 py-0.5 rounded ${DIFF_BADGE[diff] || 'bg-gray-600 text-gray-300'}`}>
+                  {diff}: {cnt}
+                </span>
+              ))}
+            </div>
+          )}
+          {(moduleQuizResult.questions || []).map((q, i) => (
+            <div key={i} className="bg-gray-800/60 rounded-lg p-2.5 space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-brand-400 font-medium">{i + 1}. {q.type}</span>
+                <span className={`text-xs px-1 py-0.5 rounded ${DIFF_BADGE[q.difficulty] || ''}`}>{q.difficulty}</span>
+              </div>
+              <p className="text-xs text-white">{q.text}</p>
+              <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
+              {q.explanation && <p className="text-xs text-gray-500">{q.explanation}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModuleFlashcardPanel({ mod, form, setForm, loading, onGenerate, result }) {
+  const canGenerate = form.content.trim() && !loading;
+  return (
+    <div className="border-t border-gray-700 px-4 py-3 bg-gray-900/40">
+      <div className="text-xs font-semibold text-purple-400 mb-2 flex items-center gap-1.5">
+        <BookOpen className="w-3.5 h-3.5" /> AI Flashcard Generator — {mod.title}
+      </div>
+      <div className="space-y-2">
+        <label className="text-xs text-gray-400 block mb-1">Paste content or describe topics to create flashcards from</label>
+        <textarea
+          className="input w-full h-20 resize-none text-sm"
+          value={form.content}
+          onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
+          placeholder="E.g. 'Barcode scanning steps: open EZ app, tap scan, align barcode, confirm product details...' or paste text directly"
+        />
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <label className="text-xs text-gray-400 block mb-1">Card Count</label>
+            <input className="input w-full text-sm" type="number" min="3" max="20" value={form.count}
+              onChange={e => setForm(f => ({ ...f, count: Math.max(3, Math.min(20, Number(e.target.value))) }))} />
+          </div>
+        </div>
+        <button onClick={() => onGenerate(mod)} disabled={!canGenerate}
+          className="w-full btn-primary text-sm py-1.5 flex items-center justify-center gap-1.5 disabled:opacity-50"
+          style={{ background: canGenerate ? undefined : undefined }}>
+          {loading
+            ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Generating...</>
+            : <><Sparkles className="w-3.5 h-3.5" /> Generate {form.count} Flashcards &amp; Save to Module</>}
+        </button>
+        {result && (
+          <div className="mt-2 space-y-1.5">
+            <div className="text-xs text-emerald-400 font-medium">{result.flashcards?.length || 0} flashcards saved to module</div>
+            {(result.flashcards || []).map((fc, i) => (
+              <div key={i} className="bg-gray-800 border border-gray-700 rounded-lg p-2.5 grid grid-cols-2 gap-3 text-xs">
+                <div><span className="text-purple-400 font-medium">Q: </span><span className="text-gray-300">{fc.front}</span></div>
+                <div><span className="text-emerald-400 font-medium">A: </span><span className="text-gray-400">{fc.back}</span></div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function QuizModal({ course, quizFile, quizFileRef, quizForm, setQuizForm, quizGenLoading, generatedQuiz, onGenerate, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-brand-400" />
+            <div>
+              <h3 className="font-semibold text-white">AI Quiz Generator</h3>
+              <p className="text-xs text-gray-400 mt-0.5">{course.title}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* File upload */}
+          <div>
+            <label className="text-xs text-gray-400 block mb-1.5 font-medium">Upload Document (PDF / DOCX / TXT)</label>
+            <div className="flex gap-2 items-center">
+              <label className="btn-secondary text-sm flex items-center gap-2 cursor-pointer flex-1 justify-center py-2.5">
+                <Upload className="w-4 h-4" />
+                {quizFile ? quizFile.name : 'Choose file to upload'}
+                <input ref={quizFileRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden"
+                  onChange={e => { /* handled by parent via onGenerate */ quizFileRef._setFile && quizFileRef._setFile(e.target.files?.[0] || null); }} />
+              </label>
+              {quizFile && (
+                <button onClick={() => { quizFileRef._setFile && quizFileRef._setFile(null); if (quizFileRef.current) quizFileRef.current.value = ''; }}
+                  className="text-gray-500 hover:text-red-400 p-2"><X className="w-4 h-4" /></button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <div className="flex-1 h-px bg-gray-700" />
+            <span>or paste content manually</span>
+            <div className="flex-1 h-px bg-gray-700" />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Content / transcript</label>
+            <textarea className="input w-full h-28 resize-none text-sm" value={quizForm.content}
+              onChange={e => setQuizForm(f => ({ ...f, content: e.target.value }))}
+              placeholder="Paste video transcript, PDF text, SOP content, or key topics to cover..." />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Content Type</label>
+              <select className="input w-full text-sm" value={quizForm.contentType}
+                onChange={e => setQuizForm(f => ({ ...f, contentType: e.target.value }))}>
+                {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Difficulty</label>
+              <select className="input w-full text-sm" value={quizForm.difficulty}
+                onChange={e => setQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
+                <option value="MIXED">Mixed (3E + 4M + 3H)</option>
+                {['EASY', 'MEDIUM', 'HARD'].map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Questions</label>
+              <input className="input w-full text-sm" type="number" min="3" max="20" value={quizForm.count}
+                onChange={e => setQuizForm(f => ({ ...f, count: parseInt(e.target.value) || 10 }))} />
+            </div>
+          </div>
+
+          <button onClick={onGenerate} disabled={quizGenLoading || (!quizForm.content.trim() && !quizFile)}
+            className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 disabled:opacity-50">
+            {quizGenLoading ? <><Loader className="w-4 h-4 animate-spin" /> Generating questions...</>
+              : <><Sparkles className="w-4 h-4" /> Generate {quizForm.count} Questions &amp; Save to Course</>}
+          </button>
+
+          {generatedQuiz && (
+            <div className="mt-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    {generatedQuiz.questions?.length || 0} questions generated
+                    {generatedQuiz.quiz ? ` — saved as Quiz #${generatedQuiz.quiz.id}` : ''}
+                  </span>
+                </div>
+                {generatedQuiz.quiz && (
+                  <div className="flex gap-1.5">
+                    {Object.entries(
+                      (generatedQuiz.questions || []).reduce((acc, q) => { acc[q.difficulty] = (acc[q.difficulty] || 0) + 1; return acc; }, {})
+                    ).map(([diff, cnt]) => (
+                      <span key={diff} className={`text-xs px-1.5 py-0.5 rounded ${DIFF_BADGE[diff] || 'bg-gray-600 text-gray-300'}`}>
+                        {diff[0]}: {cnt}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {generatedQuiz.questions?.map((q, i) => (
+                <div key={i} className="bg-gray-800 rounded-xl p-3 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-brand-400">{i + 1}. {q.type}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${DIFF_BADGE[q.difficulty] || 'bg-gray-600 text-gray-300'}`}>{q.difficulty}</span>
+                  </div>
+                  <p className="text-sm text-white">{q.text}</p>
+                  <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
+                  {q.explanation && <p className="text-xs text-gray-500">{q.explanation}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
 
 export default function CourseManager() {
   const { t } = useTranslation();
@@ -55,6 +488,14 @@ export default function CourseManager() {
   const [moduleQuizLoading, setModuleQuizLoading] = useState(false);
   const [moduleQuizResult, setModuleQuizResult] = useState(null);
   const moduleQuizFileRef = useRef(null);
+
+  const [moduleFlashcardOpen, setModuleFlashcardOpen] = useState(null);
+  const [moduleFlashcardForm, setModuleFlashcardForm] = useState({ content: '', count: 10 });
+  const [moduleFlashcardLoading, setModuleFlashcardLoading] = useState(false);
+  const [moduleFlashcardResult, setModuleFlashcardResult] = useState(null);
+
+  // Attach setter to ref so QuizModal can clear the file without needing state prop drilling
+  quizFileRef._setFile = setQuizFile;
 
   const uploadFile = async (file, type = 'file', courseId = null) => {
     const formData = new FormData();
@@ -94,7 +535,6 @@ export default function CourseManager() {
 
   // ── Edit ────────────────────────────────────────────────────────────────────
   const openEdit = async (course) => {
-    // Fetch full course with modules
     try {
       const full = await courseApi.get(course.id);
       setEditingCourse(full);
@@ -226,113 +666,37 @@ export default function CourseManager() {
     }
   };
 
-  const DIFFICULTY_OPTIONS = ['MIXED', 'EASY', 'MEDIUM', 'HARD'];
-  const DIFF_BADGE = { EASY: 'bg-emerald-500/20 text-emerald-400', MEDIUM: 'bg-yellow-500/20 text-yellow-400', HARD: 'bg-red-500/20 text-red-400' };
-
-  const ModuleQuizPanel = ({ mod }) => {
-    const canGenerate = (moduleQuizForm.prompt.trim() || moduleQuizFile) && !moduleQuizLoading;
-    return (
-      <div className="p-3 border-t border-gray-700 bg-gray-900/50 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-brand-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" /> AI Quiz Generator — {mod.title}
-          </p>
-          <span className="text-xs text-gray-500">Generates 10 questions stored in course</span>
-        </div>
-
-        {/* File upload */}
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Upload Document (PDF / DOCX)</label>
-          <div className="flex gap-2 items-center">
-            <label className="btn-secondary text-xs py-1.5 flex items-center gap-1.5 cursor-pointer flex-1 justify-center">
-              <Upload className="w-3.5 h-3.5" />
-              {moduleQuizFile ? moduleQuizFile.name : 'Choose file'}
-              <input ref={moduleQuizFileRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden"
-                onChange={e => setModuleQuizFile(e.target.files?.[0] || null)} />
-            </label>
-            {moduleQuizFile && (
-              <button onClick={() => { setModuleQuizFile(null); if (moduleQuizFileRef.current) moduleQuizFileRef.current.value = ''; }}
-                className="text-gray-500 hover:text-red-400 p-1"><X className="w-3.5 h-3.5" /></button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <div className="flex-1 h-px bg-gray-700" />
-          <span>or describe topics</span>
-          <div className="flex-1 h-px bg-gray-700" />
-        </div>
-
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Paste content or describe topics</label>
-          <textarea className="input w-full h-16 resize-none text-sm"
-            value={moduleQuizForm.prompt}
-            onChange={e => setModuleQuizForm(f => ({ ...f, prompt: e.target.value }))}
-            placeholder={`e.g. "Diamond 4C grades, IGI certification, solitaire settings, pricing for ${mod.title}"`} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Difficulty</label>
-            <select className="input w-full text-sm" value={moduleQuizForm.difficulty}
-              onChange={e => setModuleQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
-              {DIFFICULTY_OPTIONS.map(d => (
-                <option key={d} value={d}>{d === 'MIXED' ? 'Mixed (3E + 4M + 3H)' : d}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Questions</label>
-            <input className="input w-full text-sm" type="number" min="3" max="20"
-              value={moduleQuizForm.count}
-              onChange={e => setModuleQuizForm(f => ({ ...f, count: parseInt(e.target.value) || 10 }))} />
-          </div>
-        </div>
-
-        <button onClick={() => generateModuleQuiz(mod)}
-          disabled={!canGenerate}
-          className="btn-primary text-xs py-1.5 w-full flex items-center justify-center gap-1.5 disabled:opacity-50">
-          {moduleQuizLoading
-            ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Generating questions...</>
-            : <><Sparkles className="w-3.5 h-3.5" /> Generate {moduleQuizForm.count} Questions &amp; Save to Course</>}
-        </button>
-
-        {moduleQuizResult && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
-              <CheckCircle className="w-3.5 h-3.5" />
-              {moduleQuizResult.questions?.length || 0} questions generated
-              {moduleQuizResult.quiz ? ` and saved (Quiz #${moduleQuizResult.quiz.id})` : ''}
-            </div>
-            {moduleQuizResult.quiz && (
-              <div className="bg-gray-800/40 rounded-lg p-2 text-xs text-gray-400 flex gap-3">
-                {Object.entries(
-                  (moduleQuizResult.questions || []).reduce((acc, q) => { acc[q.difficulty] = (acc[q.difficulty] || 0) + 1; return acc; }, {})
-                ).map(([diff, cnt]) => (
-                  <span key={diff} className={`px-1.5 py-0.5 rounded ${DIFF_BADGE[diff] || 'bg-gray-600 text-gray-300'}`}>
-                    {diff}: {cnt}
-                  </span>
-                ))}
-              </div>
-            )}
-            {(moduleQuizResult.questions || []).map((q, i) => (
-              <div key={i} className="bg-gray-800/60 rounded-lg p-2.5 space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-brand-400 font-medium">{i + 1}. {q.type}</span>
-                  <span className={`text-xs px-1 py-0.5 rounded ${DIFF_BADGE[q.difficulty] || ''}`}>{q.difficulty}</span>
-                </div>
-                <p className="text-xs text-white">{q.text}</p>
-                <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
-                {q.explanation && <p className="text-xs text-gray-500">{q.explanation}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+  // ── Per-module flashcard generation ─────────────────────────────────────────
+  const openModuleFlashcard = (modId) => {
+    if (moduleFlashcardOpen === modId) {
+      setModuleFlashcardOpen(null);
+    } else {
+      setModuleFlashcardOpen(modId);
+      setModuleFlashcardForm({ content: '', count: 10 });
+      setModuleFlashcardResult(null);
+    }
   };
 
-  // ── Generate quiz ───────────────────────────────────────────────────────────
+  const generateModuleFlashcards = async (mod) => {
+    if (!moduleFlashcardForm.content.trim()) return;
+    setModuleFlashcardLoading(true);
+    setModuleFlashcardResult(null);
+    try {
+      const result = await aiApi.generateFlashcards({
+        content: moduleFlashcardForm.content,
+        moduleTitle: mod.title,
+        count: moduleFlashcardForm.count,
+        moduleId: mod.id,
+      });
+      setModuleFlashcardResult(result);
+    } catch (err) {
+      alert(err.error || 'Failed to generate flashcards');
+    } finally {
+      setModuleFlashcardLoading(false);
+    }
+  };
+
+  // ── Generate quiz (course-level modal) ──────────────────────────────────────
   const generateQuiz = async () => {
     if (!quizForm.content.trim() && !quizFile) return;
     setQuizGenLoading(true);
@@ -365,273 +729,6 @@ export default function CourseManager() {
     if (quizFileRef.current) quizFileRef.current.value = '';
   };
 
-  // ── Shared file upload widget ───────────────────────────────────────────────
-  const FileUploadField = ({ label, value, onChange, accept, type = 'file', courseId = null }) => (
-    <div>
-      <label className="text-xs text-gray-400 block mb-1">{label}</label>
-      <div className="flex gap-2">
-        <input className="input flex-1 text-sm" value={value || ''} onChange={e => onChange(e.target.value, null)}
-          placeholder="Paste URL or upload →" />
-        <label className={`btn-secondary text-xs flex items-center gap-1.5 cursor-pointer ${uploadingFile || uploadingThumb ? 'opacity-50' : ''}`}>
-          <Upload className="w-3.5 h-3.5" />
-          Upload
-          <input type="file" accept={accept} className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              type === 'thumbnail' ? setUploadingThumb(true) : setUploadingFile(true);
-              try {
-                const { url, s3Key } = await uploadFile(file, type, courseId);
-                onChange(url, s3Key);
-              } catch { alert('Upload failed'); }
-              finally { type === 'thumbnail' ? setUploadingThumb(false) : setUploadingFile(false); }
-            }} />
-        </label>
-      </div>
-    </div>
-  );
-
-  // ── Course info form (shared between create & edit) ─────────────────────────
-  const CourseForm = ({ isEdit }) => (
-    <div className="space-y-4">
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Title *</label>
-          <input className="input w-full" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Diamond Fundamentals" />
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Department</label>
-          <select className="input w-full" value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}>
-            {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div className="lg:col-span-2">
-          <label className="text-xs text-gray-400 block mb-1">Description</label>
-          <textarea className="input w-full h-20 resize-none" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Course description..." />
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Tags (comma-separated)</label>
-          <input className="input w-full" value={form.tags} onChange={e => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="diamond,4c,fundamentals" />
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Estimated Hours</label>
-          <input className="input w-full" type="number" min="0.5" step="0.5" value={form.estimatedHours} onChange={e => setForm(f => ({ ...f, estimatedHours: parseFloat(e.target.value) }))} />
-        </div>
-        <div className="lg:col-span-2">
-          <FileUploadField label="Thumbnail"
-            value={form.thumbnail} accept="image/*" type="thumbnail"
-            courseId={isEdit ? editingCourse?.id : null}
-            onChange={(url, s3Key) => setForm(f => ({ ...f, thumbnail: url, ...(s3Key && { thumbnailS3Key: s3Key }) }))} />
-          {form.thumbnail && <img src={form.thumbnail} alt="" className="mt-2 h-16 rounded-lg object-cover border border-gray-700" />}
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">Title (Hindi)</label>
-          <input className="input w-full" value={form.titleHi || ''} onChange={e => setForm(f => ({ ...f, titleHi: e.target.value }))} placeholder="हिंदी में शीर्षक" />
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">Title (Telugu)</label>
-          <input className="input w-full" value={form.titleTe || ''} onChange={e => setForm(f => ({ ...f, titleTe: e.target.value }))} placeholder="తెలుగులో శీర్షిక" />
-        </div>
-      </div>
-      <div className="flex items-center gap-4 flex-wrap">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" className="rounded" checked={form.isPublished} onChange={e => setForm(f => ({ ...f, isPublished: e.target.checked }))} />
-          <span className="text-sm text-gray-300">{form.isPublished ? 'Published' : 'Draft — not visible to learners'}</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" className="rounded" checked={form.isMandatory || false} onChange={e => setForm(f => ({ ...f, isMandatory: e.target.checked }))} />
-          <span className="text-sm text-gray-300">Mandatory — auto-enroll new JCs</span>
-        </label>
-      </div>
-    </div>
-  );
-
-  // ── Module add form ─────────────────────────────────────────────────────────
-  const AddModulePanel = () => (
-    <div className="mt-4 p-4 bg-gray-800/60 border border-gray-700 rounded-xl space-y-3">
-      <h4 className="text-sm font-semibold text-white">Add Module</h4>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Title *</label>
-          <input className="input w-full text-sm" value={moduleForm.title} onChange={e => setModuleForm(f => ({ ...f, title: e.target.value }))} placeholder="Module title" />
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Content Type</label>
-          <select className="input w-full text-sm" value={moduleForm.contentType} onChange={e => setModuleForm(f => ({ ...f, contentType: e.target.value, contentUrl: '', s3Key: '' }))}>
-            {CONTENT_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
-          </select>
-        </div>
-        {moduleForm.contentType !== 'EMBED' && (
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Duration (seconds)</label>
-            <input className="input w-full text-sm" type="number" min="0" value={moduleForm.duration} onChange={e => setModuleForm(f => ({ ...f, duration: parseInt(e.target.value) || 0 }))} placeholder="600" />
-          </div>
-        )}
-        <div className={moduleForm.contentType === 'EMBED' ? 'col-span-2' : 'col-span-2'}>
-          {moduleForm.contentType === 'ARTICLE' ? (
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Article Content</label>
-              <textarea className="input w-full h-24 resize-none text-sm" value={moduleForm.contentUrl} onChange={e => setModuleForm(f => ({ ...f, contentUrl: e.target.value }))} placeholder="Write article or paste URL..." />
-            </div>
-          ) : moduleForm.contentType === 'EMBED' ? (
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Embed Code or URL</label>
-              <textarea
-                className="input w-full h-28 resize-none text-sm font-mono"
-                value={moduleForm.contentUrl}
-                onChange={e => setModuleForm(f => ({ ...f, contentUrl: e.target.value, s3Key: '' }))}
-                placeholder={`Paste full iframe embed code:\n<iframe src="https://scribehow.com/embed/..." width="100%" allow="fullscreen" ...></iframe>\n\nOr just the embed URL:\nhttps://scribehow.com/embed/...`}
-              />
-              <p className="text-xs text-gray-500 mt-1">Supports Scribehow, Loom, Google Slides, YouTube, and any embeddable content</p>
-            </div>
-          ) : (
-            <FileUploadField label={moduleForm.contentType === 'VIDEO' ? 'Video / Audio' : 'Document / File'}
-              value={moduleForm.contentUrl}
-              accept={moduleForm.contentType === 'VIDEO' ? 'video/*,audio/*' : moduleForm.contentType === 'PPT' ? '.ppt,.pptx' : '.pdf,.doc,.docx,.jpg,.png'}
-              type="file"
-              courseId={editingCourse?.id}
-              onChange={(url, s3Key) => setModuleForm(f => ({ ...f, contentUrl: url, ...(s3Key && { s3Key }) }))} />
-          )}
-        </div>
-        {/* Module thumbnail */}
-        <div className="col-span-2">
-          <FileUploadField
-            label="Module Thumbnail (optional)"
-            value={moduleForm.thumbnail}
-            accept="image/*"
-            type="thumbnail"
-            courseId={editingCourse?.id}
-            onChange={(url, s3Key) => setModuleForm(f => ({ ...f, thumbnail: url, ...(s3Key && { thumbnailS3Key: s3Key }) }))}
-          />
-          {moduleForm.thumbnail && (
-            <img src={moduleForm.thumbnail} alt="thumbnail preview" className="mt-2 h-16 rounded-lg object-cover border border-gray-700" />
-          )}
-        </div>
-      </div>
-      <div className="flex gap-2 justify-end">
-        <button onClick={() => { setShowAddModule(false); setModuleForm(emptyModuleForm()); }} className="btn-secondary text-xs py-1.5">Cancel</button>
-        <button onClick={handleAddModule} disabled={addingModule || !moduleForm.title.trim()} className="btn-primary text-xs py-1.5 flex items-center gap-1.5">
-          {addingModule ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-          Add Module
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── Shared AI Quiz modal ────────────────────────────────────────────────────
-  const QuizModal = () => (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-gray-800">
-          <div className="flex items-center gap-3">
-            <Sparkles className="w-5 h-5 text-brand-400" />
-            <div>
-              <h3 className="font-semibold text-white">AI Quiz Generator</h3>
-              <p className="text-xs text-gray-400 mt-0.5">{showQuizGen.title}</p>
-            </div>
-          </div>
-          <button onClick={closeQuizModal} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="p-5 space-y-4">
-          {/* File upload */}
-          <div>
-            <label className="text-xs text-gray-400 block mb-1.5 font-medium">Upload Document (PDF / DOCX / TXT)</label>
-            <div className="flex gap-2 items-center">
-              <label className="btn-secondary text-sm flex items-center gap-2 cursor-pointer flex-1 justify-center py-2.5">
-                <Upload className="w-4 h-4" />
-                {quizFile ? quizFile.name : 'Choose file to upload'}
-                <input ref={quizFileRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden"
-                  onChange={e => setQuizFile(e.target.files?.[0] || null)} />
-              </label>
-              {quizFile && (
-                <button onClick={() => { setQuizFile(null); if (quizFileRef.current) quizFileRef.current.value = ''; }}
-                  className="text-gray-500 hover:text-red-400 p-2"><X className="w-4 h-4" /></button>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <div className="flex-1 h-px bg-gray-700" />
-            <span>or paste content manually</span>
-            <div className="flex-1 h-px bg-gray-700" />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-400 block mb-1">Content / transcript</label>
-            <textarea className="input w-full h-28 resize-none text-sm" value={quizForm.content}
-              onChange={e => setQuizForm(f => ({ ...f, content: e.target.value }))}
-              placeholder="Paste video transcript, PDF text, SOP content, or key topics to cover..." />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Content Type</label>
-              <select className="input w-full text-sm" value={quizForm.contentType}
-                onChange={e => setQuizForm(f => ({ ...f, contentType: e.target.value }))}>
-                {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Difficulty</label>
-              <select className="input w-full text-sm" value={quizForm.difficulty}
-                onChange={e => setQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
-                <option value="MIXED">Mixed (3E + 4M + 3H)</option>
-                {['EASY', 'MEDIUM', 'HARD'].map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-400 block mb-1">Questions</label>
-              <input className="input w-full text-sm" type="number" min="3" max="20" value={quizForm.count}
-                onChange={e => setQuizForm(f => ({ ...f, count: parseInt(e.target.value) || 10 }))} />
-            </div>
-          </div>
-
-          <button onClick={generateQuiz} disabled={quizGenLoading || (!quizForm.content.trim() && !quizFile)}
-            className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 disabled:opacity-50">
-            {quizGenLoading ? <><Loader className="w-4 h-4 animate-spin" /> Generating questions...</>
-              : <><Sparkles className="w-4 h-4" /> Generate {quizForm.count} Questions &amp; Save to Course</>}
-          </button>
-
-          {generatedQuiz && (
-            <div className="mt-2 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-400">
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    {generatedQuiz.questions?.length || 0} questions generated
-                    {generatedQuiz.quiz ? ` — saved as Quiz #${generatedQuiz.quiz.id}` : ''}
-                  </span>
-                </div>
-                {generatedQuiz.quiz && (
-                  <div className="flex gap-1.5">
-                    {Object.entries(
-                      (generatedQuiz.questions || []).reduce((acc, q) => { acc[q.difficulty] = (acc[q.difficulty] || 0) + 1; return acc; }, {})
-                    ).map(([diff, cnt]) => (
-                      <span key={diff} className={`text-xs px-1.5 py-0.5 rounded ${DIFF_BADGE[diff] || 'bg-gray-600 text-gray-300'}`}>
-                        {diff[0]}: {cnt}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {generatedQuiz.questions?.map((q, i) => (
-                <div key={i} className="bg-gray-800 rounded-xl p-3 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-brand-400">{i + 1}. {q.type}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${DIFF_BADGE[q.difficulty] || 'bg-gray-600 text-gray-300'}`}>{q.difficulty}</span>
-                  </div>
-                  <p className="text-sm text-white">{q.text}</p>
-                  <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
-                  {q.explanation && <p className="text-xs text-gray-500">{q.explanation}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
   // ── VIEWS ───────────────────────────────────────────────────────────────────
 
   if (view === 'create') return (
@@ -644,7 +741,11 @@ export default function CourseManager() {
           <h2 className="font-semibold text-white">Create New Course</h2>
         </div>
         <div className="card space-y-4">
-          <CourseForm isEdit={false} />
+          <CourseForm
+            form={form} setForm={setForm} isEdit={false} editingCourse={null}
+            uploadFileFn={uploadFile} uploadingFile={uploadingFile} uploadingThumb={uploadingThumb}
+            setUploadingFile={setUploadingFile} setUploadingThumb={setUploadingThumb}
+          />
           <div className="flex gap-2 justify-end pt-2 border-t border-gray-800">
             <button onClick={() => { setView('list'); setForm(emptyForm()); }} className="btn-secondary">Cancel</button>
             <button onClick={handleCreate} disabled={saving || !form.title} className="btn-primary flex items-center gap-2">
@@ -673,7 +774,11 @@ export default function CourseManager() {
         {/* Course details form */}
         <div className="card space-y-4">
           <h3 className="font-semibold text-white text-sm">Course Details</h3>
-          <CourseForm isEdit={true} />
+          <CourseForm
+            form={form} setForm={setForm} isEdit={true} editingCourse={editingCourse}
+            uploadFileFn={uploadFile} uploadingFile={uploadingFile} uploadingThumb={uploadingThumb}
+            setUploadingFile={setUploadingFile} setUploadingThumb={setUploadingThumb}
+          />
           <div className="flex gap-2 justify-end pt-2 border-t border-gray-800">
             <button onClick={() => togglePublish(editingCourse)} className="btn-secondary text-sm">
               {form.isPublished ? 'Unpublish' : 'Publish'}
@@ -706,6 +811,7 @@ export default function CourseManager() {
             {(editingCourse.modules || []).map((mod) => {
               const Icon = MODULE_ICON[mod.contentType] || File;
               const quizOpen = moduleQuizOpen === mod.id;
+              const flashcardOpen = moduleFlashcardOpen === mod.id;
               return (
                 <div key={mod.id} className="bg-gray-800/60 border border-gray-700 rounded-xl overflow-hidden">
                   <div className="flex items-center gap-3 p-3 group">
@@ -725,6 +831,16 @@ export default function CourseManager() {
                         )}
                       </div>
                     </div>
+                    {(mod.thumbnail) && (
+                      <img src={mod.thumbnail} alt="" className="w-8 h-8 rounded-lg object-cover border border-gray-600 shrink-0" />
+                    )}
+                    <button
+                      onClick={() => openModuleFlashcard(mod.id)}
+                      title="Generate flashcards for this module"
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all ${flashcardOpen ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'opacity-0 group-hover:opacity-100 text-gray-400 border-gray-700 hover:text-purple-400 hover:border-purple-500/30'}`}>
+                      <BookOpen className="w-3.5 h-3.5" />
+                      {flashcardOpen ? 'Close' : 'Cards'}
+                    </button>
                     <button
                       onClick={() => openModuleQuiz(mod.id)}
                       title="Generate quiz for this module"
@@ -737,17 +853,63 @@ export default function CourseManager() {
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  {quizOpen && <ModuleQuizPanel mod={mod} />}
+                  {flashcardOpen && (
+                    <ModuleFlashcardPanel
+                      mod={mod}
+                      form={moduleFlashcardForm}
+                      setForm={setModuleFlashcardForm}
+                      loading={moduleFlashcardLoading}
+                      onGenerate={generateModuleFlashcards}
+                      result={moduleFlashcardResult}
+                    />
+                  )}
+                  {quizOpen && (
+                    <ModuleQuizPanel
+                      mod={mod}
+                      moduleQuizForm={moduleQuizForm}
+                      setModuleQuizForm={setModuleQuizForm}
+                      moduleQuizFile={moduleQuizFile}
+                      setModuleQuizFile={setModuleQuizFile}
+                      moduleQuizLoading={moduleQuizLoading}
+                      onGenerate={generateModuleQuiz}
+                      moduleQuizResult={moduleQuizResult}
+                      moduleQuizFileRef={moduleQuizFileRef}
+                    />
+                  )}
                 </div>
               );
             })}
           </div>
 
-          {showAddModule && <AddModulePanel />}
+          {showAddModule && (
+            <AddModulePanel
+              moduleForm={moduleForm}
+              setModuleForm={setModuleForm}
+              addingModule={addingModule}
+              handleAddModule={handleAddModule}
+              onCancel={() => { setShowAddModule(false); setModuleForm(emptyModuleForm()); }}
+              editingCourse={editingCourse}
+              uploadFileFn={uploadFile}
+              uploadingFile={uploadingFile} uploadingThumb={uploadingThumb}
+              setUploadingFile={setUploadingFile} setUploadingThumb={setUploadingThumb}
+            />
+          )}
         </div>
       </div>
 
-      {showQuizGen && <QuizModal />}
+      {showQuizGen && (
+        <QuizModal
+          course={showQuizGen}
+          quizFile={quizFile}
+          quizFileRef={quizFileRef}
+          quizForm={quizForm}
+          setQuizForm={setQuizForm}
+          quizGenLoading={quizGenLoading}
+          generatedQuiz={generatedQuiz}
+          onGenerate={generateQuiz}
+          onClose={closeQuizModal}
+        />
+      )}
     </Layout>
   );
 
@@ -820,7 +982,19 @@ export default function CourseManager() {
         )}
       </div>
 
-      {showQuizGen && <QuizModal />}
+      {showQuizGen && (
+        <QuizModal
+          course={showQuizGen}
+          quizFile={quizFile}
+          quizFileRef={quizFileRef}
+          quizForm={quizForm}
+          setQuizForm={setQuizForm}
+          quizGenLoading={quizGenLoading}
+          generatedQuiz={generatedQuiz}
+          onGenerate={generateQuiz}
+          onClose={closeQuizModal}
+        />
+      )}
     </Layout>
   );
 }
