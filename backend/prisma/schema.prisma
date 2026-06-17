@@ -142,9 +142,9 @@ model Module {
   titleHi        String?
   titleTe        String?
   description String?
+  contentUrl  String   @db.Text
   order       Int
   contentType ContentType
-  contentUrl  String
   s3Key       String?
   duration    Int         @default(0)
   aiSummary      String?     @db.Text
