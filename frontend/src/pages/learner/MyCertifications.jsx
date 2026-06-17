@@ -128,11 +128,11 @@ export default function MyCertifications() {
                           <ReadinessBar score={cert.readinessScore} />
                         </div>
 
-                        {cert.status === 'READY' && (
+                        {(cert.status === 'READY' || cert.status === 'NEARLY_READY') && (
                           <div className="mt-3">
                             <Link to={`/learn/certificate/${cert.id}`}
-                              className="inline-flex items-center gap-1.5 text-xs bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 px-3 py-1.5 rounded-lg border border-yellow-500/30 transition-colors font-medium">
-                              <Award className="w-3.5 h-3.5" /> View Certificate
+                              className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors font-medium ${cert.status === 'READY' ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border-yellow-500/30' : 'bg-gray-700/50 hover:bg-gray-700 text-gray-400 border-gray-600'}`}>
+                              <Award className="w-3.5 h-3.5" /> {cert.status === 'READY' ? 'View Certificate' : 'Preview Certificate'}
                             </Link>
                           </div>
                         )}

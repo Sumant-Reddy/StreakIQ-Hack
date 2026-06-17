@@ -175,17 +175,37 @@ Always respond in the same language as the user's question.`;
   return { answer, sources, sourceSection: sources.length ? `\nSources: ${sources.join(', ')}` : '' };
 }
 
+async function extractTextFromBuffer(buffer, mimeType) {
+  if (mimeType === 'application/pdf' || mimeType === 'application/x-pdf') {
+    const pdfParse = require('pdf-parse');
+    const data = await pdfParse(buffer);
+    return data.text.substring(0, 8000);
+  }
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || mimeType === 'application/msword') {
+    const mammoth = require('mammoth');
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value.substring(0, 8000);
+  }
+  return buffer.toString('utf-8').substring(0, 8000);
+}
+
 async function generateQuiz({ content, contentType, difficulty = 'MEDIUM', count = 10, courseTitle = '' }) {
+  const isMixed = difficulty === 'MIXED';
+  const difficultyLine = isMixed
+    ? `- Generate EXACTLY 3 EASY, 4 MEDIUM, and 3 HARD questions (total 10). Label each with the correct difficulty in the "difficulty" field.`
+    : `- Difficulty: ${difficulty} for all questions`;
+  const totalCount = isMixed ? 10 : count;
+
   const prompt = `You are an expert educational content creator for CaratLane, a jewelry retail company.
 
-Generate ${count} quiz questions based on this ${contentType} content about "${courseTitle}".
+Generate ${totalCount} quiz questions based on this ${contentType} content about "${courseTitle}".
 
 Content:
 ${content.substring(0, 4000)}
 
 Requirements:
 - Mix of MCQ (60%), True/False (20%), and Scenario-based (20%) questions
-- Difficulty: ${difficulty}
+${difficultyLine}
 - Focus on practical application and retention
 - Questions should test understanding, not just memorization
 - Include 4 options for MCQ, mark correct answer
@@ -349,4 +369,5 @@ module.exports = {
   scoreRoleplay,
   generateRoleplayResponse,
   callLLM,
+  extractTextFromBuffer,
 };

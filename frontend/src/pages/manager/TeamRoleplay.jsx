@@ -102,13 +102,14 @@ export default function TeamRoleplay() {
 
         {/* Summary stats */}
         {summary && summary.total > 0 && (
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             {[
-              { label: 'Total Sessions', value: summary.total, icon: MessageSquare, color: 'text-brand-400' },
-              { label: 'Avg Overall', value: `${summary.avgOverall}%`, icon: Star, color: 'text-yellow-400' },
-              { label: 'Avg Product', value: `${summary.avgProduct}%`, icon: Award, color: 'text-emerald-400' },
-              { label: 'Avg Comms', value: `${summary.avgComm}%`, icon: TrendingUp, color: 'text-blue-400' },
-              { label: 'Avg Upsell', value: `${summary.avgUpsell}%`, icon: TrendingUp, color: 'text-orange-400' },
+              { label: 'Total Sessions',  value: summary.total,                      icon: MessageSquare, color: 'text-brand-400'  },
+              { label: 'Avg Overall',     value: `${summary.avgOverall}%`,            icon: Star,         color: 'text-yellow-400' },
+              { label: 'Avg Product',     value: `${summary.avgProduct}%`,            icon: Award,        color: 'text-emerald-400'},
+              { label: 'Avg Confidence',  value: `${summary.avgConfidence ?? 0}%`,    icon: TrendingUp,   color: 'text-purple-400' },
+              { label: 'Avg Comms',       value: `${summary.avgComm}%`,               icon: TrendingUp,   color: 'text-blue-400'   },
+              { label: 'Avg Upsell',      value: `${summary.avgUpsell}%`,             icon: TrendingUp,   color: 'text-orange-400' },
             ].map(({ label, value, icon: Icon, color }) => (
               <div key={label} className="card py-4">
                 <div className="flex items-center gap-2 mb-1">
@@ -149,6 +150,80 @@ export default function TeamRoleplay() {
             </div>
           </div>
         )}
+
+        {/* Per-learner performance breakdown */}
+        {sessions.length > 0 && (() => {
+          const learnerStats = Object.values(
+            sessions.reduce((acc, s) => {
+              const uid = s.user?.id ?? s.userId;
+              if (!acc[uid]) acc[uid] = { name: s.user?.name || '?', department: s.user?.department, count: 0, overall: 0, product: 0, comm: 0, upsell: 0, conf: 0 };
+              acc[uid].count++;
+              acc[uid].overall += s.overallScore       || 0;
+              acc[uid].product += s.productScore       || 0;
+              acc[uid].comm    += s.communicationScore || 0;
+              acc[uid].upsell  += s.upsellScore        || 0;
+              acc[uid].conf    += s.confidenceScore    || 0;
+              return acc;
+            }, {})
+          ).map(u => ({
+            name: u.name, department: u.department, sessions: u.count,
+            avgOverall:    Math.round(u.overall / u.count),
+            avgProduct:    Math.round(u.product / u.count),
+            avgComm:       Math.round(u.comm    / u.count),
+            avgUpsell:     Math.round(u.upsell  / u.count),
+            avgConfidence: Math.round(u.conf    / u.count),
+          })).sort((a, b) => b.avgOverall - a.avgOverall);
+
+          return (
+            <div className="card overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-white">Learner Performance Breakdown</h2>
+                <span className="text-xs text-gray-500">{learnerStats.length} team member{learnerStats.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-gray-800">
+                      <th className="pb-2 font-medium w-6">#</th>
+                      <th className="pb-2 font-medium">Name</th>
+                      <th className="pb-2 font-medium hidden sm:table-cell">Dept</th>
+                      <th className="pb-2 font-medium text-center">Sessions</th>
+                      <th className="pb-2 font-medium text-center">Product</th>
+                      <th className="pb-2 font-medium text-center">Confidence</th>
+                      <th className="pb-2 font-medium text-center">Comms</th>
+                      <th className="pb-2 font-medium text-center">Upsell</th>
+                      <th className="pb-2 font-medium text-center">Overall</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800">
+                    {learnerStats.map((u, i) => (
+                      <tr key={u.name + i} className="hover:bg-gray-800/40 transition-colors">
+                        <td className="py-2.5 pr-2 text-gray-500">
+                          {i === 0 ? <Trophy className="w-3.5 h-3.5 text-yellow-400" /> : <span>{i + 1}</span>}
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-500 to-pink-500 flex items-center justify-center text-white font-semibold text-xs shrink-0">
+                              {u.name[0]?.toUpperCase()}
+                            </div>
+                            <span className="text-white font-medium">{u.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 pr-3 text-gray-400 hidden sm:table-cell">{u.department || '—'}</td>
+                        <td className="py-2.5 text-center text-gray-400">{u.sessions}</td>
+                        <td className="py-2.5 text-center"><ScoreChip value={u.avgProduct} /></td>
+                        <td className="py-2.5 text-center"><ScoreChip value={u.avgConfidence} /></td>
+                        <td className="py-2.5 text-center"><ScoreChip value={u.avgComm} /></td>
+                        <td className="py-2.5 text-center"><ScoreChip value={u.avgUpsell} /></td>
+                        <td className="py-2.5 text-center"><ScoreChip value={u.avgOverall} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Filter bar */}
         {sessions.length > 0 && (

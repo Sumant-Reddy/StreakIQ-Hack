@@ -1,13 +1,16 @@
 const router = require('express').Router();
+const multer = require('multer');
 const prisma = require('../config/database');
 const { authenticate, requireAdmin, requireManager } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { generateQuiz, generateSummary, generateFlashcards, generateManagerInsight } = require('../services/aiService');
+const { generateQuiz, generateSummary, generateFlashcards, generateManagerInsight, extractTextFromBuffer } = require('../services/aiService');
 const { analyzeRisk } = require('../services/riskService');
 const { calculateRetentionScore } = require('../services/retentionService');
 const { generateRecommendations } = require('../services/recommendationService');
 
-// Generate quiz from content
+const quizUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+// Generate quiz from content (text body)
 router.post('/generate-quiz', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const { content, contentType = 'PDF', difficulty = 'MEDIUM', count = 10, courseTitle = '', courseId } = req.body;
   if (!content) return res.status(400).json({ error: 'Content is required' });
@@ -15,8 +18,9 @@ router.post('/generate-quiz', authenticate, requireAdmin, asyncHandler(async (re
   const questions = await generateQuiz({ content, contentType, difficulty, count, courseTitle });
 
   if (courseId) {
+    const diffLabel = difficulty === 'MIXED' ? 'Mixed Difficulty' : difficulty;
     let quiz = await prisma.quiz.create({
-      data: { courseId: Number(courseId), title: `AI Quiz - ${courseTitle}`, isAIGenerated: true, passingScore: 70 },
+      data: { courseId: Number(courseId), title: `AI Quiz - ${courseTitle || 'Course'} (${diffLabel})`, isAIGenerated: true, passingScore: 70 },
     });
     await prisma.question.createMany({
       data: questions.map((q, i) => ({
@@ -31,6 +35,51 @@ router.post('/generate-quiz', authenticate, requireAdmin, asyncHandler(async (re
 
   res.json({ questions });
 }));
+
+// Generate quiz from uploaded file (PDF, DOCX, TXT)
+router.post('/generate-quiz-from-upload', authenticate, requireAdmin,
+  quizUpload.single('file'),
+  asyncHandler(async (req, res) => {
+    const { courseId, courseTitle = '', difficulty = 'MIXED', count = 10, contentType = 'PDF' } = req.body;
+
+    let content = req.body.content || '';
+
+    if (req.file) {
+      try {
+        content = await extractTextFromBuffer(req.file.buffer, req.file.mimetype);
+      } catch (err) {
+        return res.status(422).json({ error: `Could not extract text from file: ${err.message}` });
+      }
+    }
+
+    if (!content.trim()) return res.status(400).json({ error: 'No content found. Provide a file or paste text.' });
+
+    const questions = await generateQuiz({ content, contentType, difficulty, count: Number(count), courseTitle });
+
+    if (courseId) {
+      const diffLabel = difficulty === 'MIXED' ? 'Mixed Difficulty' : difficulty;
+      let quiz = await prisma.quiz.create({
+        data: {
+          courseId: Number(courseId),
+          title: `AI Quiz - ${courseTitle || 'Course'} (${diffLabel})`,
+          isAIGenerated: true,
+          passingScore: 70,
+        },
+      });
+      await prisma.question.createMany({
+        data: questions.map((q, i) => ({
+          quizId: quiz.id, text: q.text, type: q.type, difficulty: q.difficulty,
+          options: q.options, correctAnswer: q.correctAnswer, explanation: q.explanation,
+          points: q.points || 10, order: i + 1,
+        })),
+      });
+      quiz = await prisma.quiz.findUnique({ where: { id: quiz.id }, include: { questions: true } });
+      return res.json({ quiz, questions });
+    }
+
+    res.json({ questions });
+  })
+);
 
 // Generate course summary
 router.post('/generate-summary', authenticate, asyncHandler(async (req, res) => {

@@ -12,9 +12,14 @@ async function attachPresignedUrls(course) {
   const [thumbnailPresigned, modulesWithUrls] = await Promise.all([
     course.thumbnailS3Key ? getPresignedUrl(course.thumbnailS3Key, 3600) : Promise.resolve(null),
     Promise.all((course.modules || []).map(async (m) => {
-      if (!m.s3Key) return m;
-      const presignedUrl = await getPresignedUrl(m.s3Key, 3600);
-      return { ...m, presignedUrl };
+      const [presignedUrl, thumbnailPresigned] = await Promise.all([
+        m.s3Key ? getPresignedUrl(m.s3Key, 3600) : Promise.resolve(null),
+        m.thumbnailS3Key ? getPresignedUrl(m.thumbnailS3Key, 3600) : Promise.resolve(null),
+      ]);
+      const out = { ...m };
+      if (presignedUrl) out.presignedUrl = presignedUrl;
+      if (thumbnailPresigned) out.thumbnailPresigned = thumbnailPresigned;
+      return out;
     })),
   ]);
   return {
@@ -59,8 +64,15 @@ router.get('/:id', authenticate, asyncHandler(async (req, res) => {
     where: { userId_courseId: { userId: req.user.id, courseId: course.id } },
   });
 
+  const completedModuleIds = enrollment
+    ? (await prisma.watchSession.findMany({
+        where: { userId: req.user.id, completedAt: { not: null }, module: { courseId: course.id } },
+        select: { moduleId: true },
+      })).map(ws => ws.moduleId)
+    : [];
+
   const courseWithUrls = await attachPresignedUrls(course);
-  res.json({ ...courseWithUrls, enrolled: !!enrollment, progress: enrollment?.progressPercent || 0 });
+  res.json({ ...courseWithUrls, enrolled: !!enrollment, progress: enrollment?.progressPercent || 0, completedModuleIds });
 }));
 
 router.post('/', authenticate, requireAdmin, asyncHandler(async (req, res) => {
@@ -102,12 +114,16 @@ router.post('/:id/enroll', authenticate, asyncHandler(async (req, res) => {
 
 router.post('/:id/modules', authenticate, requireAdmin, asyncHandler(async (req, res) => {
   const courseId = Number(req.params.id);
-  const { title, contentType, contentUrl, s3Key, duration, description } = req.body;
+  const { title, contentType, contentUrl, s3Key, duration, description, thumbnail, thumbnailS3Key } = req.body;
   if (!title || !contentType) return res.status(400).json({ error: 'Title and contentType are required' });
 
   const count = await prisma.module.count({ where: { courseId } });
   const module = await prisma.module.create({
-    data: { courseId, title, contentType, contentUrl: contentUrl || '', s3Key: s3Key || null, duration: duration || 0, description, order: count + 1 },
+    data: {
+      courseId, title, contentType, contentUrl: contentUrl || '', s3Key: s3Key || null,
+      duration: duration || 0, description, order: count + 1,
+      thumbnail: thumbnail || null, thumbnailS3Key: thumbnailS3Key || null,
+    },
   });
 
   // Generate AI summary + index in Qdrant for ALL content types (non-blocking)
@@ -153,7 +169,7 @@ router.post('/:id/modules', authenticate, requireAdmin, asyncHandler(async (req,
 }));
 
 router.put('/:courseId/modules/:moduleId', authenticate, requireAdmin, asyncHandler(async (req, res) => {
-  const { title, contentType, contentUrl, s3Key, duration, description } = req.body;
+  const { title, contentType, contentUrl, s3Key, duration, description, thumbnail, thumbnailS3Key } = req.body;
   const module = await prisma.module.update({
     where: { id: Number(req.params.moduleId) },
     data: {
@@ -163,6 +179,8 @@ router.put('/:courseId/modules/:moduleId', authenticate, requireAdmin, asyncHand
       ...(s3Key !== undefined && { s3Key }),
       ...(duration !== undefined && { duration: Number(duration) }),
       ...(description !== undefined && { description }),
+      ...(thumbnail !== undefined && { thumbnail: thumbnail || null }),
+      ...(thumbnailS3Key !== undefined && { thumbnailS3Key: thumbnailS3Key || null }),
     },
   });
   res.json(module);
@@ -195,10 +213,13 @@ router.get('/:courseId/next-quiz', authenticate, asyncHandler(async (req, res) =
 
 router.post('/:courseId/modules/:moduleId/watch', authenticate, asyncHandler(async (req, res) => {
   const { watchedSecs, totalSecs, completed } = req.body;
+  const courseId = Number(req.params.courseId);
+  const moduleId = Number(req.params.moduleId);
+
   const session = await prisma.watchSession.create({
     data: {
       userId: req.user.id,
-      moduleId: Number(req.params.moduleId),
+      moduleId,
       watchedSecs,
       totalSecs,
       completedAt: completed ? new Date() : null,
@@ -206,17 +227,30 @@ router.post('/:courseId/modules/:moduleId/watch', authenticate, asyncHandler(asy
   });
 
   if (completed) {
-    const { enqueueEvent } = require('../queues/learningQueue');
-    await enqueueEvent('VIDEO_WATCHED', req.user.id, { completionPercent: watchedSecs / totalSecs });
-  }
+    // Update enrollment progress directly (don't block on queue)
+    const [totalModules, completedSessions] = await Promise.all([
+      prisma.module.count({ where: { courseId } }),
+      prisma.watchSession.findMany({
+        where: { userId: req.user.id, completedAt: { not: null }, module: { courseId } },
+        select: { moduleId: true },
+      }),
+    ]);
+    const uniqueCompleted = new Set(completedSessions.map(ws => ws.moduleId)).size;
+    const progress = totalModules > 0 ? Math.round((uniqueCompleted / totalModules) * 100) : 0;
+    await prisma.enrollment.update({
+      where: { userId_courseId: { userId: req.user.id, courseId } },
+      data: { progressPercent: progress, lastAccessedAt: new Date() },
+    }).catch(() => {});
 
-  // Check badges after video completion
-  if (completed) {
+    // Fire-and-forget background jobs — never block the response
+    const { enqueueEvent } = require('../queues/learningQueue');
+    enqueueEvent('VIDEO_WATCHED', req.user.id, { completionPercent: watchedSecs / totalSecs }).catch(() => {});
+
     const { checkAllBadges } = require('../services/gamificationService');
     checkAllBadges(req.user.id).catch(() => {});
   }
 
-  res.json(session);
+  res.json({ ...session, progress: completed ? undefined : undefined });
 }));
 
 module.exports = router;

@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '../../components/Layout';
 import { courseApi, aiApi, adminApi } from '../../services/api';
 import {
   Plus, BookOpen, Edit, Eye, Brain, X, CheckCircle, Loader,
   RefreshCw, Upload, ImagePlus, Trash2, Save, ChevronDown, ChevronUp,
-  FileText, Video, File, Globe, ArrowLeft,
+  FileText, Video, File, Globe, ArrowLeft, Sparkles,
 } from 'lucide-react';
 
 const DEPARTMENTS = ['Retail', 'Operations', 'Management', 'Training'];
-const CONTENT_TYPES = ['VIDEO', 'PDF', 'SOP', 'PPT', 'ARTICLE'];
+const CONTENT_TYPES = ['VIDEO', 'PDF', 'SOP', 'PPT', 'ARTICLE', 'EMBED'];
 
-const MODULE_ICON = { VIDEO: Video, PDF: FileText, SOP: FileText, PPT: File, ARTICLE: Globe };
+const MODULE_ICON = { VIDEO: Video, PDF: FileText, SOP: FileText, PPT: File, ARTICLE: Globe, EMBED: Globe };
+const EMBED_TYPES = new Set(['EMBED']);
 
 function emptyForm() {
   return {
@@ -22,7 +23,7 @@ function emptyForm() {
 }
 
 function emptyModuleForm() {
-  return { title: '', contentType: 'VIDEO', contentUrl: '', s3Key: '', duration: 0, description: '' };
+  return { title: '', contentType: 'VIDEO', contentUrl: '', s3Key: '', duration: 0, description: '', thumbnail: '', thumbnailS3Key: '' };
 }
 
 export default function CourseManager() {
@@ -42,9 +43,18 @@ export default function CourseManager() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadingThumb, setUploadingThumb] = useState(false);
 
-  const [quizForm, setQuizForm] = useState({ content: '', contentType: 'PDF', difficulty: 'MEDIUM', count: 5 });
+  const [quizForm, setQuizForm] = useState({ content: '', contentType: 'PDF', difficulty: 'MIXED', count: 10 });
+  const [quizFile, setQuizFile] = useState(null);
   const [quizGenLoading, setQuizGenLoading] = useState(false);
   const [generatedQuiz, setGeneratedQuiz] = useState(null);
+  const quizFileRef = useRef(null);
+
+  const [moduleQuizOpen, setModuleQuizOpen] = useState(null);
+  const [moduleQuizForm, setModuleQuizForm] = useState({ prompt: '', count: 10, difficulty: 'MIXED' });
+  const [moduleQuizFile, setModuleQuizFile] = useState(null);
+  const [moduleQuizLoading, setModuleQuizLoading] = useState(false);
+  const [moduleQuizResult, setModuleQuizResult] = useState(null);
+  const moduleQuizFileRef = useRef(null);
 
   const uploadFile = async (file, type = 'file', courseId = null) => {
     const formData = new FormData();
@@ -169,17 +179,190 @@ export default function CourseManager() {
     } finally { setSyncing(false); }
   };
 
+  // ── Per-module quiz generation ──────────────────────────────────────────────
+  const openModuleQuiz = (modId) => {
+    if (moduleQuizOpen === modId) {
+      setModuleQuizOpen(null);
+    } else {
+      setModuleQuizOpen(modId);
+      setModuleQuizForm({ prompt: '', count: 10, difficulty: 'MIXED' });
+      setModuleQuizFile(null);
+      setModuleQuizResult(null);
+    }
+  };
+
+  const generateModuleQuiz = async (mod) => {
+    if (!moduleQuizForm.prompt.trim() && !moduleQuizFile) return;
+    if (!editingCourse) return;
+    setModuleQuizLoading(true);
+    setModuleQuizResult(null);
+    try {
+      let result;
+      if (moduleQuizFile) {
+        const fd = new FormData();
+        fd.append('file', moduleQuizFile);
+        fd.append('courseId', editingCourse.id);
+        fd.append('courseTitle', mod.title);
+        fd.append('difficulty', moduleQuizForm.difficulty);
+        fd.append('count', moduleQuizForm.count);
+        fd.append('contentType', mod.contentType);
+        if (moduleQuizForm.prompt.trim()) fd.append('content', moduleQuizForm.prompt);
+        result = await aiApi.generateQuizFromUpload(fd);
+      } else {
+        result = await aiApi.generateQuiz({
+          content: moduleQuizForm.prompt,
+          contentType: mod.contentType || 'ARTICLE',
+          difficulty: moduleQuizForm.difficulty,
+          count: moduleQuizForm.count,
+          courseId: editingCourse.id,
+          courseTitle: mod.title,
+        });
+      }
+      setModuleQuizResult(result);
+    } catch (err) {
+      alert(err.error || 'Failed to generate quiz');
+    } finally {
+      setModuleQuizLoading(false);
+    }
+  };
+
+  const DIFFICULTY_OPTIONS = ['MIXED', 'EASY', 'MEDIUM', 'HARD'];
+  const DIFF_BADGE = { EASY: 'bg-emerald-500/20 text-emerald-400', MEDIUM: 'bg-yellow-500/20 text-yellow-400', HARD: 'bg-red-500/20 text-red-400' };
+
+  const ModuleQuizPanel = ({ mod }) => {
+    const canGenerate = (moduleQuizForm.prompt.trim() || moduleQuizFile) && !moduleQuizLoading;
+    return (
+      <div className="p-3 border-t border-gray-700 bg-gray-900/50 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-brand-400 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" /> AI Quiz Generator — {mod.title}
+          </p>
+          <span className="text-xs text-gray-500">Generates 10 questions stored in course</span>
+        </div>
+
+        {/* File upload */}
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Upload Document (PDF / DOCX)</label>
+          <div className="flex gap-2 items-center">
+            <label className="btn-secondary text-xs py-1.5 flex items-center gap-1.5 cursor-pointer flex-1 justify-center">
+              <Upload className="w-3.5 h-3.5" />
+              {moduleQuizFile ? moduleQuizFile.name : 'Choose file'}
+              <input ref={moduleQuizFileRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden"
+                onChange={e => setModuleQuizFile(e.target.files?.[0] || null)} />
+            </label>
+            {moduleQuizFile && (
+              <button onClick={() => { setModuleQuizFile(null); if (moduleQuizFileRef.current) moduleQuizFileRef.current.value = ''; }}
+                className="text-gray-500 hover:text-red-400 p-1"><X className="w-3.5 h-3.5" /></button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex-1 h-px bg-gray-700" />
+          <span>or describe topics</span>
+          <div className="flex-1 h-px bg-gray-700" />
+        </div>
+
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Paste content or describe topics</label>
+          <textarea className="input w-full h-16 resize-none text-sm"
+            value={moduleQuizForm.prompt}
+            onChange={e => setModuleQuizForm(f => ({ ...f, prompt: e.target.value }))}
+            placeholder={`e.g. "Diamond 4C grades, IGI certification, solitaire settings, pricing for ${mod.title}"`} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Difficulty</label>
+            <select className="input w-full text-sm" value={moduleQuizForm.difficulty}
+              onChange={e => setModuleQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
+              {DIFFICULTY_OPTIONS.map(d => (
+                <option key={d} value={d}>{d === 'MIXED' ? 'Mixed (3E + 4M + 3H)' : d}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Questions</label>
+            <input className="input w-full text-sm" type="number" min="3" max="20"
+              value={moduleQuizForm.count}
+              onChange={e => setModuleQuizForm(f => ({ ...f, count: parseInt(e.target.value) || 10 }))} />
+          </div>
+        </div>
+
+        <button onClick={() => generateModuleQuiz(mod)}
+          disabled={!canGenerate}
+          className="btn-primary text-xs py-1.5 w-full flex items-center justify-center gap-1.5 disabled:opacity-50">
+          {moduleQuizLoading
+            ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Generating questions...</>
+            : <><Sparkles className="w-3.5 h-3.5" /> Generate {moduleQuizForm.count} Questions &amp; Save to Course</>}
+        </button>
+
+        {moduleQuizResult && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+              <CheckCircle className="w-3.5 h-3.5" />
+              {moduleQuizResult.questions?.length || 0} questions generated
+              {moduleQuizResult.quiz ? ` and saved (Quiz #${moduleQuizResult.quiz.id})` : ''}
+            </div>
+            {moduleQuizResult.quiz && (
+              <div className="bg-gray-800/40 rounded-lg p-2 text-xs text-gray-400 flex gap-3">
+                {Object.entries(
+                  (moduleQuizResult.questions || []).reduce((acc, q) => { acc[q.difficulty] = (acc[q.difficulty] || 0) + 1; return acc; }, {})
+                ).map(([diff, cnt]) => (
+                  <span key={diff} className={`px-1.5 py-0.5 rounded ${DIFF_BADGE[diff] || 'bg-gray-600 text-gray-300'}`}>
+                    {diff}: {cnt}
+                  </span>
+                ))}
+              </div>
+            )}
+            {(moduleQuizResult.questions || []).map((q, i) => (
+              <div key={i} className="bg-gray-800/60 rounded-lg p-2.5 space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-brand-400 font-medium">{i + 1}. {q.type}</span>
+                  <span className={`text-xs px-1 py-0.5 rounded ${DIFF_BADGE[q.difficulty] || ''}`}>{q.difficulty}</span>
+                </div>
+                <p className="text-xs text-white">{q.text}</p>
+                <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
+                {q.explanation && <p className="text-xs text-gray-500">{q.explanation}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Generate quiz ───────────────────────────────────────────────────────────
   const generateQuiz = async () => {
-    if (!quizForm.content.trim()) return;
+    if (!quizForm.content.trim() && !quizFile) return;
     setQuizGenLoading(true);
     setGeneratedQuiz(null);
     try {
-      const result = await aiApi.generateQuiz({ ...quizForm, courseId: showQuizGen?.id, courseTitle: showQuizGen?.title });
+      let result;
+      if (quizFile) {
+        const fd = new FormData();
+        fd.append('file', quizFile);
+        if (quizForm.content.trim()) fd.append('content', quizForm.content);
+        fd.append('contentType', quizForm.contentType);
+        fd.append('difficulty', quizForm.difficulty);
+        fd.append('count', quizForm.count);
+        if (showQuizGen?.id) fd.append('courseId', showQuizGen.id);
+        if (showQuizGen?.title) fd.append('courseTitle', showQuizGen.title);
+        result = await aiApi.generateQuizFromUpload(fd);
+      } else {
+        result = await aiApi.generateQuiz({ ...quizForm, courseId: showQuizGen?.id, courseTitle: showQuizGen?.title });
+      }
       setGeneratedQuiz(result);
     } catch (err) {
       alert(err.error || 'Failed to generate quiz');
     } finally { setQuizGenLoading(false); }
+  };
+
+  const closeQuizModal = () => {
+    setShowQuizGen(null);
+    setGeneratedQuiz(null);
+    setQuizFile(null);
+    if (quizFileRef.current) quizFileRef.current.value = '';
   };
 
   // ── Shared file upload widget ───────────────────────────────────────────────
@@ -278,15 +461,28 @@ export default function CourseManager() {
             {CONTENT_TYPES.map(ct => <option key={ct} value={ct}>{ct}</option>)}
           </select>
         </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Duration (seconds)</label>
-          <input className="input w-full text-sm" type="number" min="0" value={moduleForm.duration} onChange={e => setModuleForm(f => ({ ...f, duration: parseInt(e.target.value) || 0 }))} placeholder="600" />
-        </div>
-        <div className="col-span-2">
+        {moduleForm.contentType !== 'EMBED' && (
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Duration (seconds)</label>
+            <input className="input w-full text-sm" type="number" min="0" value={moduleForm.duration} onChange={e => setModuleForm(f => ({ ...f, duration: parseInt(e.target.value) || 0 }))} placeholder="600" />
+          </div>
+        )}
+        <div className={moduleForm.contentType === 'EMBED' ? 'col-span-2' : 'col-span-2'}>
           {moduleForm.contentType === 'ARTICLE' ? (
             <div>
               <label className="text-xs text-gray-400 block mb-1">Article Content</label>
               <textarea className="input w-full h-24 resize-none text-sm" value={moduleForm.contentUrl} onChange={e => setModuleForm(f => ({ ...f, contentUrl: e.target.value }))} placeholder="Write article or paste URL..." />
+            </div>
+          ) : moduleForm.contentType === 'EMBED' ? (
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Embed Code or URL</label>
+              <textarea
+                className="input w-full h-28 resize-none text-sm font-mono"
+                value={moduleForm.contentUrl}
+                onChange={e => setModuleForm(f => ({ ...f, contentUrl: e.target.value, s3Key: '' }))}
+                placeholder={`Paste full iframe embed code:\n<iframe src="https://scribehow.com/embed/..." width="100%" allow="fullscreen" ...></iframe>\n\nOr just the embed URL:\nhttps://scribehow.com/embed/...`}
+              />
+              <p className="text-xs text-gray-500 mt-1">Supports Scribehow, Loom, Google Slides, YouTube, and any embeddable content</p>
             </div>
           ) : (
             <FileUploadField label={moduleForm.contentType === 'VIDEO' ? 'Video / Audio' : 'Document / File'}
@@ -297,6 +493,20 @@ export default function CourseManager() {
               onChange={(url, s3Key) => setModuleForm(f => ({ ...f, contentUrl: url, ...(s3Key && { s3Key }) }))} />
           )}
         </div>
+        {/* Module thumbnail */}
+        <div className="col-span-2">
+          <FileUploadField
+            label="Module Thumbnail (optional)"
+            value={moduleForm.thumbnail}
+            accept="image/*"
+            type="thumbnail"
+            courseId={editingCourse?.id}
+            onChange={(url, s3Key) => setModuleForm(f => ({ ...f, thumbnail: url, ...(s3Key && { thumbnailS3Key: s3Key }) }))}
+          />
+          {moduleForm.thumbnail && (
+            <img src={moduleForm.thumbnail} alt="thumbnail preview" className="mt-2 h-16 rounded-lg object-cover border border-gray-700" />
+          )}
+        </div>
       </div>
       <div className="flex gap-2 justify-end">
         <button onClick={() => { setShowAddModule(false); setModuleForm(emptyModuleForm()); }} className="btn-secondary text-xs py-1.5">Cancel</button>
@@ -304,6 +514,120 @@ export default function CourseManager() {
           {addingModule ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
           Add Module
         </button>
+      </div>
+    </div>
+  );
+
+  // ── Shared AI Quiz modal ────────────────────────────────────────────────────
+  const QuizModal = () => (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-brand-400" />
+            <div>
+              <h3 className="font-semibold text-white">AI Quiz Generator</h3>
+              <p className="text-xs text-gray-400 mt-0.5">{showQuizGen.title}</p>
+            </div>
+          </div>
+          <button onClick={closeQuizModal} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* File upload */}
+          <div>
+            <label className="text-xs text-gray-400 block mb-1.5 font-medium">Upload Document (PDF / DOCX / TXT)</label>
+            <div className="flex gap-2 items-center">
+              <label className="btn-secondary text-sm flex items-center gap-2 cursor-pointer flex-1 justify-center py-2.5">
+                <Upload className="w-4 h-4" />
+                {quizFile ? quizFile.name : 'Choose file to upload'}
+                <input ref={quizFileRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden"
+                  onChange={e => setQuizFile(e.target.files?.[0] || null)} />
+              </label>
+              {quizFile && (
+                <button onClick={() => { setQuizFile(null); if (quizFileRef.current) quizFileRef.current.value = ''; }}
+                  className="text-gray-500 hover:text-red-400 p-2"><X className="w-4 h-4" /></button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <div className="flex-1 h-px bg-gray-700" />
+            <span>or paste content manually</span>
+            <div className="flex-1 h-px bg-gray-700" />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Content / transcript</label>
+            <textarea className="input w-full h-28 resize-none text-sm" value={quizForm.content}
+              onChange={e => setQuizForm(f => ({ ...f, content: e.target.value }))}
+              placeholder="Paste video transcript, PDF text, SOP content, or key topics to cover..." />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Content Type</label>
+              <select className="input w-full text-sm" value={quizForm.contentType}
+                onChange={e => setQuizForm(f => ({ ...f, contentType: e.target.value }))}>
+                {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Difficulty</label>
+              <select className="input w-full text-sm" value={quizForm.difficulty}
+                onChange={e => setQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
+                <option value="MIXED">Mixed (3E + 4M + 3H)</option>
+                {['EASY', 'MEDIUM', 'HARD'].map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Questions</label>
+              <input className="input w-full text-sm" type="number" min="3" max="20" value={quizForm.count}
+                onChange={e => setQuizForm(f => ({ ...f, count: parseInt(e.target.value) || 10 }))} />
+            </div>
+          </div>
+
+          <button onClick={generateQuiz} disabled={quizGenLoading || (!quizForm.content.trim() && !quizFile)}
+            className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 disabled:opacity-50">
+            {quizGenLoading ? <><Loader className="w-4 h-4 animate-spin" /> Generating questions...</>
+              : <><Sparkles className="w-4 h-4" /> Generate {quizForm.count} Questions &amp; Save to Course</>}
+          </button>
+
+          {generatedQuiz && (
+            <div className="mt-2 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-emerald-400">
+                  <CheckCircle className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    {generatedQuiz.questions?.length || 0} questions generated
+                    {generatedQuiz.quiz ? ` — saved as Quiz #${generatedQuiz.quiz.id}` : ''}
+                  </span>
+                </div>
+                {generatedQuiz.quiz && (
+                  <div className="flex gap-1.5">
+                    {Object.entries(
+                      (generatedQuiz.questions || []).reduce((acc, q) => { acc[q.difficulty] = (acc[q.difficulty] || 0) + 1; return acc; }, {})
+                    ).map(([diff, cnt]) => (
+                      <span key={diff} className={`text-xs px-1.5 py-0.5 rounded ${DIFF_BADGE[diff] || 'bg-gray-600 text-gray-300'}`}>
+                        {diff[0]}: {cnt}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {generatedQuiz.questions?.map((q, i) => (
+                <div key={i} className="bg-gray-800 rounded-xl p-3 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-brand-400">{i + 1}. {q.type}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${DIFF_BADGE[q.difficulty] || 'bg-gray-600 text-gray-300'}`}>{q.difficulty}</span>
+                  </div>
+                  <p className="text-sm text-white">{q.text}</p>
+                  <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
+                  {q.explanation && <p className="text-xs text-gray-500">{q.explanation}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -379,30 +703,41 @@ export default function CourseManager() {
             {(editingCourse.modules || []).length === 0 && (
               <p className="text-xs text-gray-500 text-center py-4">No modules yet. Add one above.</p>
             )}
-            {(editingCourse.modules || []).map((mod, idx) => {
+            {(editingCourse.modules || []).map((mod) => {
               const Icon = MODULE_ICON[mod.contentType] || File;
+              const quizOpen = moduleQuizOpen === mod.id;
               return (
-                <div key={mod.id} className="flex items-center gap-3 p-3 bg-gray-800/60 border border-gray-700 rounded-xl group">
-                  <div className="w-7 h-7 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
-                    <Icon className="w-3.5 h-3.5 text-brand-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white truncate">{mod.title}</div>
-                    <div className="text-xs text-gray-500 flex gap-2">
-                      <span>{mod.contentType}</span>
-                      {mod.duration > 0 && <span>{Math.round(mod.duration / 60)}m</span>}
-                      {mod.contentUrl && (
-                        <a href={mod.contentUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-brand-400 hover:text-brand-300 truncate max-w-[200px]">
-                          {mod.contentUrl.startsWith('http') ? 'View file' : mod.contentUrl.substring(0, 40)}
-                        </a>
-                      )}
+                <div key={mod.id} className="bg-gray-800/60 border border-gray-700 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-3 p-3 group">
+                    <div className="w-7 h-7 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
+                      <Icon className="w-3.5 h-3.5 text-brand-400" />
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-white truncate">{mod.title}</div>
+                      <div className="text-xs text-gray-500 flex gap-2">
+                        <span>{mod.contentType}</span>
+                        {mod.duration > 0 && <span>{Math.round(mod.duration / 60)}m</span>}
+                        {mod.contentUrl && (
+                          <a href={mod.contentUrl} target="_blank" rel="noopener noreferrer"
+                            className="text-brand-400 hover:text-brand-300 truncate max-w-[200px]">
+                            {mod.contentUrl.startsWith('http') ? 'View file' : mod.contentUrl.substring(0, 40)}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => openModuleQuiz(mod.id)}
+                      title="Generate quiz for this module"
+                      className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-all ${quizOpen ? 'bg-brand-500/20 text-brand-400 border-brand-500/30' : 'opacity-0 group-hover:opacity-100 text-gray-400 border-gray-700 hover:text-brand-400 hover:border-brand-500/30'}`}>
+                      <Brain className="w-3.5 h-3.5" />
+                      {quizOpen ? 'Close' : 'Quiz'}
+                    </button>
+                    <button onClick={() => handleDeleteModule(mod.id)}
+                      className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all p-1">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <button onClick={() => handleDeleteModule(mod.id)}
-                    className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-all p-1">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {quizOpen && <ModuleQuizPanel mod={mod} />}
                 </div>
               );
             })}
@@ -412,55 +747,7 @@ export default function CourseManager() {
         </div>
       </div>
 
-      {/* AI Quiz Generator modal */}
-      {showQuizGen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-800">
-              <div className="flex items-center gap-3"><Brain className="w-5 h-5 text-brand-400" /><h3 className="font-semibold text-white">AI Quiz Generator</h3></div>
-              <button onClick={() => { setShowQuizGen(null); setGeneratedQuiz(null); }} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-sm text-gray-400">Generating quiz for: <span className="text-white font-medium">{showQuizGen.title}</span></p>
-              <div className="grid grid-cols-3 gap-3">
-                <div><label className="text-xs text-gray-400 block mb-1">Content Type</label>
-                  <select className="input w-full text-sm" value={quizForm.contentType} onChange={e => setQuizForm(f => ({ ...f, contentType: e.target.value }))}>
-                    {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select></div>
-                <div><label className="text-xs text-gray-400 block mb-1">Difficulty</label>
-                  <select className="input w-full text-sm" value={quizForm.difficulty} onChange={e => setQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
-                    {['EASY', 'MEDIUM', 'HARD'].map(d => <option key={d} value={d}>{d}</option>)}
-                  </select></div>
-                <div><label className="text-xs text-gray-400 block mb-1">Questions</label>
-                  <input className="input w-full text-sm" type="number" min="3" max="20" value={quizForm.count} onChange={e => setQuizForm(f => ({ ...f, count: parseInt(e.target.value) }))} /></div>
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Paste course content / transcript</label>
-                <textarea className="input w-full h-32 resize-none text-sm" value={quizForm.content} onChange={e => setQuizForm(f => ({ ...f, content: e.target.value }))} placeholder="Paste video transcript, PDF text, or SOP content here..." />
-              </div>
-              <button onClick={generateQuiz} disabled={quizGenLoading || !quizForm.content} className="btn-primary w-full flex items-center justify-center gap-2">
-                {quizGenLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
-                {quizGenLoading ? 'Generating...' : 'Generate Quiz with AI'}
-              </button>
-              {generatedQuiz && (
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center gap-2 text-emerald-400"><CheckCircle className="w-4 h-4" /><span className="text-sm font-medium">{generatedQuiz.questions?.length || 0} questions generated{generatedQuiz.quiz ? ' and saved!' : ''}</span></div>
-                  {generatedQuiz.questions?.map((q, i) => (
-                    <div key={i} className="bg-gray-800 rounded-xl p-3 space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-brand-400">{i + 1}. {q.type}</span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${q.difficulty === 'EASY' ? 'bg-emerald-500/20 text-emerald-400' : q.difficulty === 'HARD' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{q.difficulty}</span>
-                      </div>
-                      <p className="text-sm text-white">{q.text}</p>
-                      <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {showQuizGen && <QuizModal />}
     </Layout>
   );
 
@@ -533,52 +820,7 @@ export default function CourseManager() {
         )}
       </div>
 
-      {/* AI Quiz Generator modal (list view) */}
-      {showQuizGen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-800">
-              <div className="flex items-center gap-3"><Brain className="w-5 h-5 text-brand-400" /><h3 className="font-semibold text-white">AI Quiz Generator</h3></div>
-              <button onClick={() => { setShowQuizGen(null); setGeneratedQuiz(null); }} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <p className="text-sm text-gray-400">Generating quiz for: <span className="text-white font-medium">{showQuizGen.title}</span></p>
-              <div className="grid grid-cols-3 gap-3">
-                <div><label className="text-xs text-gray-400 block mb-1">Content Type</label>
-                  <select className="input w-full text-sm" value={quizForm.contentType} onChange={e => setQuizForm(f => ({ ...f, contentType: e.target.value }))}>
-                    {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select></div>
-                <div><label className="text-xs text-gray-400 block mb-1">Difficulty</label>
-                  <select className="input w-full text-sm" value={quizForm.difficulty} onChange={e => setQuizForm(f => ({ ...f, difficulty: e.target.value }))}>
-                    {['EASY', 'MEDIUM', 'HARD'].map(d => <option key={d} value={d}>{d}</option>)}
-                  </select></div>
-                <div><label className="text-xs text-gray-400 block mb-1">Questions</label>
-                  <input className="input w-full text-sm" type="number" min="3" max="20" value={quizForm.count} onChange={e => setQuizForm(f => ({ ...f, count: parseInt(e.target.value) }))} /></div>
-              </div>
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">Paste course content / transcript</label>
-                <textarea className="input w-full h-32 resize-none text-sm" value={quizForm.content} onChange={e => setQuizForm(f => ({ ...f, content: e.target.value }))} placeholder="Paste video transcript, PDF text, or SOP content here..." />
-              </div>
-              <button onClick={generateQuiz} disabled={quizGenLoading || !quizForm.content} className="btn-primary w-full flex items-center justify-center gap-2">
-                {quizGenLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
-                {quizGenLoading ? 'Generating...' : 'Generate Quiz with AI'}
-              </button>
-              {generatedQuiz && (
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center gap-2 text-emerald-400"><CheckCircle className="w-4 h-4" /><span className="text-sm font-medium">{generatedQuiz.questions?.length || 0} questions generated{generatedQuiz.quiz ? ' and saved!' : ''}</span></div>
-                  {generatedQuiz.questions?.map((q, i) => (
-                    <div key={i} className="bg-gray-800 rounded-xl p-3 space-y-1.5">
-                      <div className="flex items-center gap-2"><span className="text-xs font-medium text-brand-400">{i + 1}. {q.type}</span><span className={`text-xs px-1.5 py-0.5 rounded ${q.difficulty === 'EASY' ? 'bg-emerald-500/20 text-emerald-400' : q.difficulty === 'HARD' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{q.difficulty}</span></div>
-                      <p className="text-sm text-white">{q.text}</p>
-                      <p className="text-xs text-emerald-400">✓ {q.correctAnswer}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {showQuizGen && <QuizModal />}
     </Layout>
   );
 }

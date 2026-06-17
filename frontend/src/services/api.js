@@ -55,6 +55,18 @@ export const quizApi = {
 
 export const aiApi = {
   generateQuiz: (data) => api.post('/ai/generate-quiz', data),
+  generateQuizFromUpload: (formData) => {
+    const token = localStorage.getItem('yami_token');
+    return fetch('/api/ai/generate-quiz-from-upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    }).then(async (res) => {
+      const json = await res.json();
+      if (!res.ok) throw json;
+      return json;
+    });
+  },
   generateSummary: (data) => api.post('/ai/generate-summary', data),
   generateFlashcards: (data) => api.post('/ai/generate-flashcards', data),
   copilotQuery: (data) => api.post('/ai/copilot/query', data),

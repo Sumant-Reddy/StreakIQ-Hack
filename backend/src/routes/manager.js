@@ -143,20 +143,41 @@ router.get('/team/roleplay/summary', authenticate, requireManager, asyncHandler(
 
   const byUser = {};
   sessions.forEach(s => {
-    if (!byUser[s.userId]) byUser[s.userId] = { name: s.user.name, total: 0, scoreSum: 0 };
+    if (!byUser[s.userId]) {
+      byUser[s.userId] = { name: s.user.name, department: s.user.department, total: 0, scoreSum: 0, productSum: 0, commSum: 0, upsellSum: 0, confidenceSum: 0 };
+    }
     byUser[s.userId].total++;
-    byUser[s.userId].scoreSum += s.overallScore || 0;
+    byUser[s.userId].scoreSum      += s.overallScore       || 0;
+    byUser[s.userId].productSum    += s.productScore       || 0;
+    byUser[s.userId].commSum       += s.communicationScore || 0;
+    byUser[s.userId].upsellSum     += s.upsellScore        || 0;
+    byUser[s.userId].confidenceSum += s.confidenceScore    || 0;
   });
   const topPerformer = Object.values(byUser).sort((a, b) => (b.scoreSum / b.total) - (a.scoreSum / a.total))[0];
 
+  const learnerBreakdown = Object.values(byUser)
+    .map(u => ({
+      name:          u.name,
+      department:    u.department,
+      sessions:      u.total,
+      avgOverall:    Math.round(u.scoreSum      / u.total),
+      avgProduct:    Math.round(u.productSum    / u.total),
+      avgComm:       Math.round(u.commSum       / u.total),
+      avgUpsell:     Math.round(u.upsellSum     / u.total),
+      avgConfidence: Math.round(u.confidenceSum / u.total),
+    }))
+    .sort((a, b) => b.avgOverall - a.avgOverall);
+
   res.json({
     total,
-    avgOverall: Math.round(avg('overallScore')),
-    avgProduct: Math.round(avg('productScore')),
-    avgComm: Math.round(avg('communicationScore')),
-    avgUpsell: Math.round(avg('upsellScore')),
-    topPerformer: topPerformer ? { name: topPerformer.name, avgScore: Math.round(topPerformer.scoreSum / topPerformer.total) } : null,
+    avgOverall:    Math.round(avg('overallScore')),
+    avgProduct:    Math.round(avg('productScore')),
+    avgComm:       Math.round(avg('communicationScore')),
+    avgUpsell:     Math.round(avg('upsellScore')),
+    avgConfidence: Math.round(avg('confidenceScore')),
+    topPerformer:  topPerformer ? { name: topPerformer.name, avgScore: Math.round(topPerformer.scoreSum / topPerformer.total) } : null,
     scenarioCounts,
+    learnerBreakdown,
   });
 }));
 

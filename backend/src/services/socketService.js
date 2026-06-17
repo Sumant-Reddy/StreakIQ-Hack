@@ -194,38 +194,55 @@ function setupSocketHandlers(io) {
     socket.on('roleplay:end', async () => {
       if (!socket.roleplaySession) return;
       const { scenario, transcript, sessionId } = socket.roleplaySession;
-      const { scoreRoleplay } = require('./aiService');
-      const scores = await scoreRoleplay({ transcript, scenario });
-
-      await prisma.roleplaySessions.create({
-        data: {
-          userId: socket.userId,
-          scenario,
-          transcript,
-          ...scores,
-        },
-      });
-
-      // Update skill scores from roleplay performance
-      const roleplaySkillMap = [
-        { skill: 'Product Knowledge', value: scores.productScore },
-        { skill: 'Customer Handling', value: scores.communicationScore },
-        { skill: 'Upselling', value: scores.upsellScore },
-      ];
-      await Promise.all(roleplaySkillMap.map(({ skill, value }) => {
-        if (value == null) return Promise.resolve();
-        return prisma.skillScore.upsert({
-          where: { userId_skill: { userId: socket.userId, skill } },
-          create: { userId: socket.userId, skill, score: Number(value) },
-          update: { score: Number(value) },
-        }).catch(() => {});
-      }));
-
-      const { checkAllBadges } = require('../services/gamificationService');
-      checkAllBadges(socket.userId).catch(() => {});
-
-      socket.emit('roleplay:scored', { ...scores, sessionId });
       socket.roleplaySession = null;
+
+      try {
+        const { scoreRoleplay } = require('./aiService');
+        const rawScores = await scoreRoleplay({ transcript, scenario });
+
+        const clamp = (v) => (typeof v === 'number' && !isNaN(v)) ? Math.min(100, Math.max(0, Math.round(v))) : null;
+        const ps  = clamp(rawScores.productScore);
+        const cs  = clamp(rawScores.confidenceScore);
+        const cms = clamp(rawScores.communicationScore);
+        const us  = clamp(rawScores.upsellScore);
+        const nums = [ps, cs, cms, us].filter(n => n !== null);
+        const scores = {
+          productScore:       ps,
+          confidenceScore:    cs,
+          communicationScore: cms,
+          upsellScore:        us,
+          overallScore:       clamp(rawScores.overallScore) ?? (nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : null),
+          feedback:           typeof rawScores.feedback === 'string' ? rawScores.feedback : '',
+          strengths:          Array.isArray(rawScores.strengths)    ? rawScores.strengths    : [],
+          improvements:       Array.isArray(rawScores.improvements) ? rawScores.improvements : [],
+        };
+
+        await prisma.roleplaySessions.create({
+          data: { userId: socket.userId, scenario, transcript, ...scores },
+        });
+
+        const roleplaySkillMap = [
+          { skill: 'Product Knowledge', value: scores.productScore },
+          { skill: 'Customer Handling', value: scores.communicationScore },
+          { skill: 'Upselling',         value: scores.upsellScore },
+        ];
+        await Promise.all(roleplaySkillMap.map(({ skill, value }) => {
+          if (value == null) return Promise.resolve();
+          return prisma.skillScore.upsert({
+            where:  { userId_skill: { userId: socket.userId, skill } },
+            create: { userId: socket.userId, skill, score: Number(value) },
+            update: { score: Number(value) },
+          }).catch(() => {});
+        }));
+
+        const { checkAllBadges } = require('../services/gamificationService');
+        checkAllBadges(socket.userId).catch(() => {});
+
+        socket.emit('roleplay:scored', { ...scores, sessionId });
+      } catch (err) {
+        logger.error('roleplay:end error:', err.message);
+        socket.emit('roleplay:error', { message: 'Scoring failed. Please try again.' });
+      }
     });
 
     // Disconnection Clean up

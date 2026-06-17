@@ -168,16 +168,12 @@ router.get('/certifications/:certId/certificate', authenticate, asyncHandler(asy
   const certId = Number(req.params.certId);
   const userId = req.user.id;
 
-  const [cert, user, enrollments, attempts] = await Promise.all([
+  const [cert, user, attempts] = await Promise.all([
     prisma.certification.findUnique({
       where: { id: certId },
       include: { courses: { include: { course: { select: { id: true, title: true } } } } },
     }),
     prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true, department: true } }),
-    prisma.enrollment.findMany({
-      where: { userId, courseId: { in: [] } }, // filled below
-      select: { courseId: true, progressPercent: true, completedAt: true },
-    }),
     prisma.quizAttempt.findMany({
       where: { userId },
       include: { quiz: { select: { courseId: true } } },
@@ -192,6 +188,8 @@ router.get('/certifications/:certId/certificate', authenticate, asyncHandler(asy
     select: { courseId: true, progressPercent: true, completedAt: true },
   });
 
+  const enrollMap = Object.fromEntries(enrollData.map(e => [e.courseId, e]));
+
   const bestByCourse = {};
   for (const a of attempts) {
     const cid = a.quiz?.courseId;
@@ -200,16 +198,31 @@ router.get('/certifications/:certId/certificate', authenticate, asyncHandler(asy
     if (!bestByCourse[cid] || pct > bestByCourse[cid]) bestByCourse[cid] = pct;
   }
 
-  const avgQuizScore = Object.values(bestByCourse).length
-    ? Math.round(Object.values(bestByCourse).reduce((s, v) => s + v, 0) / Object.values(bestByCourse).length)
-    : 0;
+  // Same formula as the certifications list endpoint: per-course binary pass/fail
+  const courseDetails = courseIds.map(cid => {
+    const enroll = enrollMap[cid];
+    const completion = enroll?.progressPercent || 0;
+    const quizScore = bestByCourse[cid] || null;
+    return {
+      completionMet: completion >= cert.minCourseCompletion,
+      quizMet: quizScore !== null && quizScore >= cert.minQuizScore,
+      completion,
+      quizScore,
+    };
+  });
 
-  const avgCompletion = courseIds.length
-    ? Math.round(enrollData.reduce((s, e) => s + (e.progressPercent || 0), 0) / courseIds.length)
-    : 0;
+  const total = courseIds.length;
+  const completionReady = total === 0 ? 0 : courseDetails.filter(c => c.completionMet).length / total;
+  const quizReady = total === 0 ? 0 : courseDetails.filter(c => c.quizMet).length / total;
+  const readinessScore = Math.round(completionReady * 50 + quizReady * 50);
+  const isEligible = readinessScore >= 80;
 
-  const readinessScore = Math.round(avgCompletion * 0.5 + avgQuizScore * 0.5);
-  const isEligible = readinessScore >= 70 && avgCompletion >= cert.minCourseCompletion && avgQuizScore >= cert.minQuizScore;
+  const avgQuizScore = total === 0 ? 0 : Math.round(
+    courseDetails.reduce((s, c) => s + (c.quizScore || 0), 0) / total
+  );
+  const avgCompletion = total === 0 ? 0 : Math.round(
+    courseDetails.reduce((s, c) => s + c.completion, 0) / total
+  );
 
   res.json({
     certification: { id: cert.id, name: cert.name, description: cert.description },

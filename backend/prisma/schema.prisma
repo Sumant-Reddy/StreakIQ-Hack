@@ -39,6 +39,7 @@ enum ContentType {
   PPT
   SOP
   ARTICLE
+  EMBED
 }
 
 enum InterventionType {
@@ -146,7 +147,9 @@ model Module {
   contentUrl  String
   s3Key       String?
   duration    Int         @default(0)
-  aiSummary   String?     @db.Text
+  aiSummary      String?     @db.Text
+  thumbnail      String?
+  thumbnailS3Key String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
