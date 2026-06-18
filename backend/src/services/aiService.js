@@ -74,7 +74,7 @@ async function callGeminiModel(ai, modelName, messages, { temperature, max_token
 }
 
 // Gemini models to try in order — newer first, fall back to stable versions
-const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+const GEMINI_MODELS = ['gemini-2.5-flash'];
 
 async function callLLM(messages, { model, temperature = 0.7, max_tokens = 2000, disableThinking = false } = {}) {
   // 1. Try Gemini (primary) — attempt models in order until one succeeds
